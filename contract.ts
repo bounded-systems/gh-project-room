@@ -64,13 +64,16 @@ export interface TextFieldSpec {
 export type FieldSpec = SingleSelectFieldSpec | TextFieldSpec;
 
 /**
- * `Type` — the nature of a work item. Mirrors the beads custom schema
+ * `Kind` — the nature of a work item. Mirrors the beads custom schema
  * (room/door/task) and adds `epic`: a parent issue whose native sub-issues are
  * the work. The epic IS the business-behavior contract.
+ *
+ * Named "Kind" not "Type": GitHub Projects v2 reserves "Type" as a built-in
+ * field name ("Item type"), so createProjectV2Field rejects it.
  */
 export const TYPE_FIELD: SingleSelectFieldSpec = {
   kind: "SINGLE_SELECT",
-  name: "Type",
+  name: "Kind",
   builtIn: false,
   options: [
     {

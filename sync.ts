@@ -20,7 +20,9 @@ import {
   applyField,
   existingContentIds,
   getProject,
+  linkRepoToProject,
   orgOpenWorkItems,
+  orgRepos,
 } from "./projects.ts";
 
 async function main(): Promise<void> {
@@ -29,6 +31,18 @@ async function main(): Promise<void> {
 
   const project = await getProject();
   log(`Front Desk: "${project.title}" (${project.id})`);
+
+  // 0. link all org repos to the project (idempotent — adds the Projects tab to each repo)
+  const repos = await orgRepos();
+  log(`linking ${repos.length} repos to Front Desk…`);
+  if (!dryRun) {
+    for (const repo of repos) {
+      await linkRepoToProject(project.id, repo.id);
+    }
+    log(`linked: ${repos.map((r) => r.name).join(", ")}`);
+  } else {
+    log(`would link: ${repos.map((r) => r.name).join(", ")}`);
+  }
 
   // 1. apply the contract
   for (const spec of FRONT_DESK_FIELDS) {

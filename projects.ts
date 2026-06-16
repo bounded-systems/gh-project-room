@@ -190,6 +190,58 @@ export async function existingContentIds(projectId: string): Promise<Set<string>
   return ids;
 }
 
+export interface OrgRepo {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** All repos in the org (paged). Used for both linking and work-item enumeration. */
+export async function orgRepos(): Promise<OrgRepo[]> {
+  type RepoConn = {
+    organization: {
+      repositories: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: Array<{ id: string; name: string }>;
+      };
+    };
+  };
+  const repos: OrgRepo[] = [];
+  let cursor: string | null = null;
+  do {
+    const data: RepoConn = await gql<RepoConn>(
+      `query($org:String!,$after:String){
+        organization(login:$org){
+          repositories(first:100, after:$after, orderBy:{field:NAME,direction:ASC}){
+            pageInfo{ hasNextPage endCursor }
+            nodes{ id name }
+          }
+        }
+      }`,
+      { org: ORG, after: cursor },
+    );
+    for (const r of data.organization.repositories.nodes) repos.push({ id: r.id, name: r.name });
+    cursor = data.organization.repositories.pageInfo.hasNextPage
+      ? data.organization.repositories.pageInfo.endCursor
+      : null;
+  } while (cursor);
+  return repos;
+}
+
+/**
+ * Link a repository to the project so it appears under the repo's Projects tab.
+ * Idempotent — safe to call on every sweep; already-linked repos are a no-op.
+ */
+export async function linkRepoToProject(projectId: string, repoId: string): Promise<void> {
+  await gql(
+    `mutation($pid:ID!,$rid:ID!){
+      linkProjectV2ToRepository(input:{ projectId:$pid, repositoryId:$rid }){
+        repository{ id }
+      }
+    }`,
+    { pid: projectId, rid: repoId },
+  );
+}
+
 export interface WorkItem {
   readonly id: string;
   readonly kind: "Issue" | "PullRequest";
@@ -204,38 +256,11 @@ export interface WorkItem {
  * the room is "tied to all repos" by construction.
  */
 export async function orgOpenWorkItems(): Promise<WorkItem[]> {
-  type RepoConn = {
-    organization: {
-      repositories: {
-        pageInfo: { hasNextPage: boolean; endCursor: string | null };
-        nodes: Array<{ name: string }>;
-      };
-    };
-  };
-  const repos: string[] = [];
-  let repoCursor: string | null = null;
-  do {
-    const data: RepoConn = await gql<RepoConn>(
-      `query($org:String!,$after:String){
-        organization(login:$org){
-          repositories(first:100, after:$after, orderBy:{field:NAME,direction:ASC}){
-            pageInfo{ hasNextPage endCursor }
-            nodes{ name }
-          }
-        }
-      }`,
-      { org: ORG, after: repoCursor },
-    );
-    for (const r of data.organization.repositories.nodes) repos.push(r.name);
-    repoCursor = data.organization.repositories.pageInfo.hasNextPage
-      ? data.organization.repositories.pageInfo.endCursor
-      : null;
-  } while (repoCursor);
-
+  const repos = await orgRepos();
   const items: WorkItem[] = [];
   for (const repo of repos) {
-    items.push(...await openIn(repo, "issues"));
-    items.push(...await openIn(repo, "pullRequests"));
+    items.push(...await openIn(repo.name, "issues"));
+    items.push(...await openIn(repo.name, "pullRequests"));
   }
   return items;
 }

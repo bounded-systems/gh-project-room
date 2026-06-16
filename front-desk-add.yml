@@ -34,7 +34,7 @@ jobs:
           private-key: ${{ secrets.FRONT_DESK_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
       - name: Add to Front Desk
-        uses: actions/add-to-project@v1.0.2 # TODO: pin to the v1.0.2 commit SHA
+        uses: actions/add-to-project@244f685bbc3b7adfa8466e08b698b5577571133e # v1.0.2
         with:
           project-url: https://github.com/orgs/bounded-systems/projects/2
           github-token: ${{ steps.app-token.outputs.token }}

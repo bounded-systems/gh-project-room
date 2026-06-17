@@ -15,16 +15,16 @@
  */
 
 import {
-  classifyKind,
   type BeadKind,
   type BeadState,
+  classifyKind,
   FRONT_DESK_FIELDS,
   FRONT_DESK_VIEWS,
   FRONT_DESK_WORKFLOWS,
   SCORE_FIELD,
   TYPE_FIELD,
 } from "./contract.ts";
-import { score, type PriorityInput } from "./prioritization.ts";
+import { type PriorityInput, score } from "./prioritization.ts";
 import {
   addItem,
   applyField,

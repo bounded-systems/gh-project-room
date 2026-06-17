@@ -541,6 +541,15 @@ export const FRONT_DESK_INSIGHTS: readonly InsightChartSpec[] = [
     yAxis: "COUNT",
     filter: "is:issue",
   },
+  {
+    name: "Capacity",
+    layout: "STACKED_COLUMN",
+    xAxis: "Milestone",
+    groupBy: "Status",
+    yAxis: "SUM",
+    yAxisField: "Effort",
+    filter: "is:issue",
+  },
 ];
 
 /**

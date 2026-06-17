@@ -61,7 +61,14 @@ export interface TextFieldSpec {
   readonly builtIn: boolean;
 }
 
-export type FieldSpec = SingleSelectFieldSpec | TextFieldSpec;
+/** A date custom field (e.g. "Start date", "Target date"). */
+export interface DateFieldSpec {
+  readonly kind: "DATE";
+  readonly name: string;
+  readonly builtIn: boolean;
+}
+
+export type FieldSpec = SingleSelectFieldSpec | TextFieldSpec | DateFieldSpec;
 
 /**
  * `Kind` — the nature of a work item. Mirrors the beads custom schema
@@ -148,31 +155,88 @@ export const TRACKED_CONTENT: readonly ("Issue" | "PullRequest")[] = [
 export type ViewLayout = "TABLE" | "BOARD" | "ROADMAP";
 
 /**
- * A Projects v2 view the room reconciles (creates if missing, updates if
- * layout/filter/grouping drifts). `groupByFieldName` is matched against the
- * live field list so it works for both built-in (e.g. "Repository") and
- * custom fields (e.g. "Kind").
+ * A Projects v2 view spec. GitHub's API has no create/update view mutations
+ * so these are documentation + drift-detection only — the sweep reports
+ * missing views as manual action items (add via UI → + New view).
+ *
+ * Field names match the GitHub Projects v2 UI exactly.
+ *
+ * Table-specific:   `groupBy`, `sortBy`, `sliceBy`, `showHierarchy`
+ * Board-specific:   `columnBy` (columns), `swimlanes` (rows), `fieldSum`,
+ *                   `sliceBy` (separate sub-boards)
+ * Roadmap-specific: `dates` ("Start date and Target date"), `zoomLevel`,
+ *                   `markers`, `sliceBy`
  */
 export interface ViewSpec {
   readonly name: string;
   readonly layout: ViewLayout;
   /** Filter query — same syntax as the UI search bar. */
   readonly filter?: string;
-  /** Group by this field name (looks up the field id at apply time). */
-  readonly groupByFieldName?: string;
+  /** Table: group rows. */
+  readonly groupBy?: string;
+  /** Table/Roadmap: sort order. */
+  readonly sortBy?: string;
+  /** All layouts: split into separate sub-views. */
+  readonly sliceBy?: string;
+  /** Table: nest sub-issues under their parent. */
+  readonly showHierarchy?: boolean;
+  /** Board: field that defines columns (default: Status). */
+  readonly columnBy?: string;
+  /** Board: field that defines swimlane rows. */
+  readonly swimlanes?: string;
+  /** Board: field to sum in column footers (e.g. "Count"). */
+  readonly fieldSum?: string;
+  /** Roadmap: date range fields shown as bars (e.g. "Start date and Target date"). */
+  readonly dates?: string;
+  /** Roadmap: zoom granularity (e.g. "Month"). */
+  readonly zoomLevel?: string;
+  /** Roadmap: milestone/iteration field shown as vertical marker lines. */
+  readonly markers?: string;
 }
 
 /**
- * The named views the room reconciles on Front Desk.
+ * The named views on Front Desk.
  * Daily planning loop: Ready → Board → Blocked.
- * Navigation: Epics, By Repo, By Kind.
+ * Navigation: Epics, Roadmap.
  * Default: Lobby (all open items).
  */
 export const FRONT_DESK_VIEWS: readonly ViewSpec[] = [
-  { name: "Lobby",    layout: "TABLE",  filter: "-status:Done" },
-  { name: "Ready",    layout: "TABLE",  filter: "status:Todo no:depends-on" },
-  { name: "Board",    layout: "BOARD" },
-  { name: "Epics",    layout: "TABLE",  filter: "kind:epic" },
-  { name: "Blocked",  layout: "TABLE",  filter: "status:Blocked" },
-  { name: "Roadmap",  layout: "ROADMAP" },
+  {
+    name: "Lobby",
+    layout: "TABLE",
+    filter: "-status:Blocked -status:Done",
+    sortBy: "Status",
+    showHierarchy: true,
+  },
+  {
+    name: "Ready",
+    layout: "TABLE",
+    filter: "status:Todo no:depends-on",
+    sliceBy: "Kind",
+  },
+  {
+    name: "Board",
+    layout: "BOARD",
+    columnBy: "Status",
+    swimlanes: "Milestone",
+  },
+  {
+    name: "Epics",
+    layout: "TABLE",
+    filter: "kind:epic",
+    groupBy: "Milestone",
+    showHierarchy: true,
+  },
+  {
+    name: "Blocked",
+    layout: "TABLE",
+    filter: "status:Blocked",
+    sortBy: "Status",
+  },
+  {
+    name: "Roadmap",
+    layout: "ROADMAP",
+    dates: "Start date and Target date",
+    zoomLevel: "Month",
+  },
 ];

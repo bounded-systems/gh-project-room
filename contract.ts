@@ -221,6 +221,20 @@ export const VALUE_FIELD: NumberFieldSpec = {
   builtIn: false,
 };
 
+/**
+ * `Score` — composite priority score written back by the sweep (#7).
+ *
+ * Computed by `score()` in prioritization.ts from Effort, Value, and the
+ * "Depends on" edge graph. Eligible items (open/in-progress, no open blockers)
+ * receive a non-zero score; ineligible items score 0 and sort to the bottom.
+ * Updated on every sweep only when the value changes (anti-thrash guard).
+ */
+export const SCORE_FIELD: NumberFieldSpec = {
+  kind: "NUMBER",
+  name: "Score",
+  builtIn: false,
+};
+
 /** The full set of fields the room reconciles the live board against. */
 export const FRONT_DESK_FIELDS: readonly FieldSpec[] = [
   TYPE_FIELD,
@@ -230,6 +244,7 @@ export const FRONT_DESK_FIELDS: readonly FieldSpec[] = [
   TARGET_DATE_FIELD,
   EFFORT_FIELD,
   VALUE_FIELD,
+  SCORE_FIELD,
 ];
 
 /**
@@ -329,6 +344,12 @@ export const FRONT_DESK_VIEWS: readonly ViewSpec[] = [
     layout: "TABLE",
     filter: "status:Todo no:depends-on",
     sliceBy: "Kind",
+  },
+  {
+    name: "Ready (ranked)",
+    layout: "TABLE",
+    filter: "status:Todo no:depends-on",
+    sortBy: "Score",
   },
   {
     name: "Board",

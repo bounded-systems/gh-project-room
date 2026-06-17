@@ -139,12 +139,69 @@ export const DEPENDS_ON_FIELD: TextFieldSpec = {
  */
 export const NATIVE_FIELDS = ["Milestone", "Parent issue"] as const;
 
+/**
+ * `Start date` / `Target date` — DATE fields that power the Roadmap view (#78).
+ *
+ * The Roadmap renders each item as a bar spanning Start date → Target date; with
+ * only one set, the item shows as a point. The `Roadmap` ViewSpec already points
+ * at `"Start date and Target date"`, so these fields must exist for it to render.
+ *
+ * Unlike views and insights, DATE fields have a clean `createProjectV2Field`
+ * mutation, so the sweep creates them like any other custom field. They
+ * complement the native `Milestone` (release grouping) with an explicit per-item
+ * planning window. Assigning the actual dates/milestones to items remains a
+ * manual/operational step — see #78.
+ */
+export const START_DATE_FIELD: DateFieldSpec = {
+  kind: "DATE",
+  name: "Start date",
+  builtIn: false,
+};
+
+export const TARGET_DATE_FIELD: DateFieldSpec = {
+  kind: "DATE",
+  name: "Target date",
+  builtIn: false,
+};
+
 /** The full set of fields the room reconciles the live board against. */
 export const FRONT_DESK_FIELDS: readonly FieldSpec[] = [
   TYPE_FIELD,
   STATUS_FIELD,
   DEPENDS_ON_FIELD,
+  START_DATE_FIELD,
+  TARGET_DATE_FIELD,
 ];
+
+/**
+ * Classify a work item into a `Kind` option on first add (#51).
+ *
+ * Deterministic and label-first, so a maintainer can always override the guess
+ * by labelling the issue:
+ *   1. An explicit kind label (`epic`/`room`/`door`/`task`) wins.
+ *   2. An issue that has native sub-issues is an `epic` — it's a parent
+ *      business-behavior contract whose children are the work.
+ *   3. Everything else — PRs and leaf issues — defaults to `task`.
+ *
+ * Returns one of `TYPE_FIELD`'s option names. The sweep only calls this for
+ * items it is adding, so manually-set Kind values on existing items are never
+ * touched (the re-run idempotency requirement in #51).
+ */
+export function classifyKind(
+  item: {
+    readonly kind: "Issue" | "PullRequest";
+    readonly labels: readonly string[];
+    readonly hasSubIssues: boolean;
+  },
+): string {
+  const known = new Set(TYPE_FIELD.options.map((o) => o.name));
+  for (const label of item.labels) {
+    const name = label.toLowerCase();
+    if (known.has(name)) return name;
+  }
+  if (item.kind === "Issue" && item.hasSubIssues) return "epic";
+  return "task";
+}
 
 /** What lands on the board automatically. Draft issues are never auto-added. */
 export const TRACKED_CONTENT: readonly ("Issue" | "PullRequest")[] = [

@@ -14,7 +14,13 @@
  *       DRY_RUN=1     preview only — reconcile read-only, add nothing
  */
 
-import { FRONT_DESK_FIELDS, FRONT_DESK_VIEWS, FRONT_DESK_WORKFLOWS } from "./contract.ts";
+import {
+  classifyKind,
+  FRONT_DESK_FIELDS,
+  FRONT_DESK_VIEWS,
+  FRONT_DESK_WORKFLOWS,
+  TYPE_FIELD,
+} from "./contract.ts";
 import {
   addItem,
   applyField,
@@ -25,6 +31,7 @@ import {
   linkRepoToProject,
   orgOpenWorkItems,
   orgRepos,
+  setSingleSelectValue,
 } from "./projects.ts";
 
 async function main(): Promise<void> {
@@ -97,15 +104,33 @@ async function main(): Promise<void> {
   const missing = work.filter((w) => !onBoard.has(w.id));
   log(`open items: ${work.length}, already on board: ${work.length - missing.length}, to add: ${missing.length}`);
 
+  // Resolve the Kind field for auto-classification (#51). It may have just been
+  // created in step 1, so the getProject() snapshot can predate it — re-fetch
+  // once if it's missing. Setting Kind only on freshly added items keeps re-runs
+  // idempotent and never clobbers a manually-chosen value.
+  let kindField = project.fields.find((f) => f.name === TYPE_FIELD.name);
+  if (!dryRun && !kindField) {
+    kindField = (await getProject()).fields.find((f) => f.name === TYPE_FIELD.name);
+  }
+  const kindOptionId = (name: string): string | undefined =>
+    kindField?.options.find((o) => o.name === name)?.id;
+
   let added = 0;
   for (const w of missing) {
+    const kind = classifyKind(w);
     if (dryRun) {
-      log(`would add ${w.kind} ${w.repo}#${w.number} — ${w.title}`);
+      log(`would add ${w.kind} ${w.repo}#${w.number} — ${w.title} [Kind→${kind}]`);
       continue;
     }
-    await addItem(project.id, w.id);
+    const itemId = await addItem(project.id, w.id);
     added++;
-    log(`added ${w.kind} ${w.repo}#${w.number}`);
+    const oid = kindOptionId(kind);
+    if (kindField && oid) {
+      await setSingleSelectValue(project.id, itemId, kindField.id, oid);
+      log(`added ${w.kind} ${w.repo}#${w.number} [Kind→${kind}]`);
+    } else {
+      log(`added ${w.kind} ${w.repo}#${w.number} (Kind field unavailable — set manually)`);
+    }
   }
   log(`done — ${dryRun ? "0 (dry-run)" : added} added.`);
 }

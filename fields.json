@@ -25,5 +25,15 @@
     "kind": "TEXT",
     "name": "Depends on",
     "builtIn": false
+  },
+  {
+    "kind": "DATE",
+    "name": "Start date",
+    "builtIn": false
+  },
+  {
+    "kind": "DATE",
+    "name": "Target date",
+    "builtIn": false
   }
 ]

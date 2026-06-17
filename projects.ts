@@ -167,9 +167,11 @@ export async function applyField(project: Project, spec: FieldSpec): Promise<App
         { pid: project.id },
       );
     } else {
+      // spec.kind is "TEXT" | "DATE" here — both are valid ProjectV2CustomFieldType
+      // enum values, so the dataType interpolates directly.
       await gql(
         `mutation($pid:ID!){
-          createProjectV2Field(input:{ projectId:$pid, dataType:TEXT, name:${JSON.stringify(spec.name)} }){
+          createProjectV2Field(input:{ projectId:$pid, dataType:${spec.kind}, name:${JSON.stringify(spec.name)} }){
             projectV2Field{ ... on ProjectV2Field{ id } }
           }
         }`,
@@ -311,6 +313,10 @@ export interface WorkItem {
   readonly repo: string;
   readonly number: number;
   readonly title: string;
+  /** Label names — drives Kind classification (#51). */
+  readonly labels: readonly string[];
+  /** True when an issue has native sub-issues (an epic signal for #51). */
+  readonly hasSubIssues: boolean;
 }
 
 /**
@@ -330,11 +336,20 @@ export async function orgOpenWorkItems(): Promise<WorkItem[]> {
 
 async function openIn(repo: string, field: "issues" | "pullRequests"): Promise<WorkItem[]> {
   const kind: WorkItem["kind"] = field === "issues" ? "Issue" : "PullRequest";
+  // Only Issue has subIssues; the shared query string is reused for both
+  // connections, so the field is omitted for pull requests.
+  const subIssuesSel = field === "issues" ? "subIssues(first:0){ totalCount }" : "";
   type Resp = {
     repository: {
       conn: {
         pageInfo: { hasNextPage: boolean; endCursor: string | null };
-        nodes: Array<{ id: string; number: number; title: string }>;
+        nodes: Array<{
+          id: string;
+          number: number;
+          title: string;
+          labels: { nodes: Array<{ name: string }> } | null;
+          subIssues?: { totalCount: number };
+        }>;
       } | null;
     };
   };
@@ -346,7 +361,7 @@ async function openIn(repo: string, field: "issues" | "pullRequests"): Promise<W
         repository(owner:$org, name:$repo){
           conn: ${field}(first:100, after:$after, states:OPEN){
             pageInfo{ hasNextPage endCursor }
-            nodes{ id number title }
+            nodes{ id number title labels(first:20){ nodes{ name } } ${subIssuesSel} }
           }
         }
       }`,
@@ -354,7 +369,17 @@ async function openIn(repo: string, field: "issues" | "pullRequests"): Promise<W
     );
     const conn = data.repository.conn;
     if (!conn) break;
-    for (const n of conn.nodes) out.push({ id: n.id, kind, repo, number: n.number, title: n.title });
+    for (const n of conn.nodes) {
+      out.push({
+        id: n.id,
+        kind,
+        repo,
+        number: n.number,
+        title: n.title,
+        labels: (n.labels?.nodes ?? []).map((l) => l.name),
+        hasSubIssues: (n.subIssues?.totalCount ?? 0) > 0,
+      });
+    }
     cursor = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
   } while (cursor);
   return out;
@@ -370,4 +395,28 @@ export async function addItem(projectId: string, contentId: string): Promise<str
     { pid: projectId, cid: contentId },
   );
   return data.addProjectV2ItemById.item.id;
+}
+
+/**
+ * Set a single-select field value on a project item — used to auto-set `Kind`
+ * on freshly added items (#51).
+ *
+ * The caller only invokes this for items it just added, so a manually-chosen
+ * value on an existing item is never overwritten (re-runs skip on-board items).
+ */
+export async function setSingleSelectValue(
+  projectId: string,
+  itemId: string,
+  fieldId: string,
+  optionId: string,
+): Promise<void> {
+  await gql(
+    `mutation($pid:ID!,$iid:ID!,$fid:ID!,$oid:String!){
+      updateProjectV2ItemFieldValue(input:{
+        projectId:$pid, itemId:$iid, fieldId:$fid,
+        value:{ singleSelectOptionId:$oid }
+      }){ projectV2Item{ id } }
+    }`,
+    { pid: projectId, iid: itemId, fid: fieldId, oid: optionId },
+  );
 }

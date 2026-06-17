@@ -221,6 +221,22 @@ export const VALUE_FIELD: NumberFieldSpec = {
   builtIn: false,
 };
 
+/**
+ * `Score` — composite priority score written back by the room on every sweep (#7).
+ *
+ * Computed by `score()` in `prioritization.ts` from the item's Effort + Value
+ * fields (plus board-visible openBlockers and unblocks when available). The room
+ * writes this value; humans read it. Sorting the "Ready (ranked)" view by Score
+ * descending gives the Concierge's ready queue in priority order.
+ *
+ * Rounded to 2 decimal places before write to avoid floating-point churn.
+ */
+export const SCORE_FIELD: NumberFieldSpec = {
+  kind: "NUMBER",
+  name: "Score",
+  builtIn: false,
+};
+
 /** The full set of fields the room reconciles the live board against. */
 export const FRONT_DESK_FIELDS: readonly FieldSpec[] = [
   TYPE_FIELD,
@@ -230,6 +246,7 @@ export const FRONT_DESK_FIELDS: readonly FieldSpec[] = [
   TARGET_DATE_FIELD,
   EFFORT_FIELD,
   VALUE_FIELD,
+  SCORE_FIELD,
 ];
 
 /**
@@ -348,6 +365,12 @@ export const FRONT_DESK_VIEWS: readonly ViewSpec[] = [
     layout: "TABLE",
     filter: "status:Blocked",
     sortBy: "Status",
+  },
+  {
+    name: "Ready (ranked)",
+    layout: "TABLE",
+    filter: "status:Todo no:depends-on",
+    sortBy: "Score",
   },
   {
     name: "Roadmap",

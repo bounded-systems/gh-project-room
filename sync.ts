@@ -16,11 +16,15 @@
 
 import {
   classifyKind,
+  EFFORT_FIELD,
   FRONT_DESK_FIELDS,
   FRONT_DESK_VIEWS,
   FRONT_DESK_WORKFLOWS,
+  SCORE_FIELD,
   TYPE_FIELD,
+  VALUE_FIELD,
 } from "./contract.ts";
+import { score } from "./prioritization.ts";
 import {
   addItem,
   applyField,
@@ -31,6 +35,8 @@ import {
   linkRepoToProject,
   orgOpenWorkItems,
   orgRepos,
+  projectItems,
+  setNumberValue,
   setSingleSelectValue,
 } from "./projects.ts";
 
@@ -152,6 +158,57 @@ async function main(): Promise<void> {
     }
   }
   log(`done — ${dryRun ? "0 (dry-run)" : added} added.`);
+
+  // 5. Write back computed Score for every on-board item (#7).
+  //    Only writes when the value changes (rounded to 2dp) to avoid activity churn.
+  //    Score is computed from Effort + Value on the board; openBlockers/unblocks
+  //    default to 0 until structured edge data is available (#10).
+  let effortField = project.fields.find((f) => f.name === EFFORT_FIELD.name);
+  let valueField = project.fields.find((f) => f.name === VALUE_FIELD.name);
+  let scoreField = project.fields.find((f) => f.name === SCORE_FIELD.name);
+  if (!dryRun && (!effortField || !valueField || !scoreField)) {
+    const fresh = (await getProject()).fields;
+    effortField ??= fresh.find((f) => f.name === EFFORT_FIELD.name);
+    valueField ??= fresh.find((f) => f.name === VALUE_FIELD.name);
+    scoreField ??= fresh.find((f) => f.name === SCORE_FIELD.name);
+  }
+  if (!effortField || !valueField || !scoreField) {
+    log(
+      `score: Effort/Value/Score fields not yet on board — skipping write-back`,
+    );
+  } else {
+    const items = dryRun ? [] : await projectItems(project.id);
+    let scoreWrites = 0;
+    for (const item of items) {
+      const effort = item.numbers.get(effortField.id) ?? 0;
+      const value = item.numbers.get(valueField.id) ?? 0;
+      const currentRaw = item.numbers.get(scoreField.id);
+      const current = currentRaw != null
+        ? Math.round(currentRaw * 100) / 100
+        : null;
+      const computed = Math.round(
+        score({
+          number: 0,
+          title: "",
+          kind: "task",
+          state: item.contentState,
+          effort,
+          value,
+          openBlockers: 0,
+          unblocks: 0,
+        }) * 100,
+      ) / 100;
+      if (current !== computed) {
+        await setNumberValue(project.id, item.itemId, scoreField.id, computed);
+        scoreWrites++;
+      }
+    }
+    if (dryRun) {
+      log(`score: dry-run — would compute Score for all on-board items`);
+    } else {
+      log(`score: ${scoreWrites} write(s)`);
+    }
+  }
 }
 
 if (import.meta.main) {

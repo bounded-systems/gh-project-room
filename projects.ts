@@ -483,3 +483,104 @@ export async function setSingleSelectValue(
     { pid: projectId, iid: itemId, fid: fieldId, oid: optionId },
   );
 }
+
+/** Set a NUMBER field value on a project item (e.g. the computed Score). */
+export async function setNumberValue(
+  projectId: string,
+  itemId: string,
+  fieldId: string,
+  value: number,
+): Promise<void> {
+  await gql(
+    `mutation($pid:ID!,$iid:ID!,$fid:ID!,$num:Float!){
+      updateProjectV2ItemFieldValue(input:{
+        projectId:$pid, itemId:$iid, fieldId:$fid,
+        value:{ number:$num }
+      }){ projectV2Item{ id } }
+    }`,
+    { pid: projectId, iid: itemId, fid: fieldId, num: value },
+  );
+}
+
+/**
+ * A board item's id, content state, and number field values.
+ * Used by the Score write-back step (#7) to read Effort/Value/Score before
+ * computing and conditionally writing back the new Score.
+ */
+export interface BoardItem {
+  /** The project item node id (not the issue/PR id). */
+  readonly itemId: string;
+  /** "open" = GitHub state OPEN; "closed" = CLOSED or MERGED. */
+  readonly contentState: "open" | "closed";
+  /** Maps field node-id → numeric value for all NUMBER fields on this item. */
+  readonly numbers: ReadonlyMap<string, number>;
+}
+
+/**
+ * Fetch all items on the board with their NUMBER field values and content state
+ * (paged). Draft items have no content node and are returned with state "closed".
+ */
+export async function projectItems(projectId: string): Promise<BoardItem[]> {
+  type Resp = {
+    node: {
+      items: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: Array<{
+          id: string;
+          fieldValues: {
+            nodes: Array<{
+              field?: { id: string };
+              number?: number;
+            }>;
+          };
+          content: { state?: string } | null;
+        }>;
+      };
+    };
+  };
+  const out: BoardItem[] = [];
+  let cursor: string | null = null;
+  do {
+    const data = await gql<Resp>(
+      `query($pid:ID!,$after:String){
+        node(id:$pid){ ... on ProjectV2 {
+          items(first:100, after:$after){
+            pageInfo{ hasNextPage endCursor }
+            nodes{
+              id
+              fieldValues(first:20){ nodes{
+                ... on ProjectV2ItemFieldNumberValue{
+                  field{ ... on ProjectV2Field{ id } }
+                  number
+                }
+              } }
+              content{
+                ... on Issue{ state }
+                ... on PullRequest{ state }
+              }
+            }
+          }
+        } }
+      }`,
+      { pid: projectId, after: cursor },
+    );
+    for (const n of data.node.items.nodes) {
+      const numbers = new Map<string, number>();
+      for (const fv of n.fieldValues.nodes) {
+        if (fv.field?.id != null && fv.number != null) {
+          numbers.set(fv.field.id, fv.number);
+        }
+      }
+      const rawState = n.content?.state ?? "CLOSED";
+      out.push({
+        itemId: n.id,
+        contentState: rawState === "OPEN" ? "open" : "closed",
+        numbers,
+      });
+    }
+    cursor = data.node.items.pageInfo.hasNextPage
+      ? data.node.items.pageInfo.endCursor
+      : null;
+  } while (cursor);
+  return out;
+}

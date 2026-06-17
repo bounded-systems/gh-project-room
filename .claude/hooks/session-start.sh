@@ -1,12 +1,34 @@
 #!/bin/bash
 set -euo pipefail
 
+# Single source of truth for provisioning Deno in Claude Code's cloud sessions.
+# Safe to invoke two ways — point both at this one file:
+#   1. the environment Setup script — runs once, before Claude Code launches;
+#   2. this SessionStart hook        — runs every session, after setup.
+# Each step below is independently guarded, so running it twice is cheap and
+# running it once is sufficient.
+#
+# Local (non-web) machines are skipped entirely: developers manage their own Deno.
+
+# Only provision in the remote/web environment.
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-if ! command -v deno &>/dev/null; then
+export DENO_INSTALL="${DENO_INSTALL:-$HOME/.deno}"
+
+# Install only when absent — idempotent across the setup script + this hook.
+if ! command -v deno &>/dev/null && [ ! -x "$DENO_INSTALL/bin/deno" ]; then
   curl -fsSL https://deno.land/install.sh | sh -s -- --yes
 fi
 
-echo 'export PATH="/root/.deno/bin:$PATH"' >> "$CLAUDE_ENV_FILE"
+# Export onto PATH for the agent's tools. Done UNCONDITIONALLY (not gated on the
+# install above), so a session where Deno was pre-installed still gets it on PATH.
+# CLAUDE_ENV_FILE is only set in the hook context, so this is a no-op when this
+# file runs as the setup script — there, the install above is the contribution.
+if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  {
+    echo "export DENO_INSTALL=\"$DENO_INSTALL\""
+    echo 'export PATH="$DENO_INSTALL/bin:$PATH"'
+  } >> "$CLAUDE_ENV_FILE"
+fi

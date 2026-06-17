@@ -1,0 +1,47 @@
+{
+  "_note": "beads is the canonical origin for work-item state; GitHub Projects (Front Desk) is a projection. Items with projected=false explain empty chart segments ('No Kind', 'No Milestone'). Full edge model: docs/beads-projection.md.",
+  "edgeTypes": {
+    "parent-child": "GitHub native sub-issues (projected — Auto-add sub-issues workflow)",
+    "blocks": "Depends on field (field exists, not yet written from beads)",
+    "related": "No GitHub surface — tracked in docs/beads-projection.md for future export",
+    "discovered-from": "No GitHub surface — tracked in docs/beads-projection.md for future export"
+  },
+  "projections": [
+    {
+      "beadsConcept": "state (open / in_progress / blocked / closed)",
+      "ghField": "Status",
+      "projected": true,
+      "notes": "Lifecycle workflows: item added→Todo, PR linked→In Progress, closed/merged→Done. bd ready = Todo with no open Depends on."
+    },
+    {
+      "beadsConcept": "type (epic / room / door / task)",
+      "ghField": "Kind",
+      "projected": false,
+      "notes": "Pending #51 — auto-set Kind when item lands. Charts show 'No Kind' until implemented."
+    },
+    {
+      "beadsConcept": "blocks edges (non-parent dependency)",
+      "ghField": "Depends on",
+      "projected": false,
+      "notes": "Field exists; not yet written from beads. Manual free-text workaround only. Structured edge projection TBD."
+    },
+    {
+      "beadsConcept": "parent-child (epic → sub-issues)",
+      "ghField": "Parent issue (native)",
+      "projected": true,
+      "notes": "Native GitHub sub-issues. Auto-add sub-issues workflow lands children on the board automatically."
+    },
+    {
+      "beadsConcept": "release / time-box",
+      "ghField": "Milestone (native)",
+      "projected": false,
+      "notes": "Pending #78 — create milestones, set Start/Target date fields on epics. Charts show 'No Milestone' until done."
+    },
+    {
+      "beadsConcept": "related, discovered-from edges",
+      "ghField": "(none)",
+      "projected": false,
+      "notes": "No GitHub Projects surface for these edge types. Tracked in docs/beads-projection.md for future beads export."
+    }
+  ]
+}

@@ -385,3 +385,124 @@ export const FRONT_DESK_INSIGHTS: readonly InsightChartSpec[] = [
     filter: "is:issue",
   },
 ];
+
+/**
+ * Beads→GitHub projection map.
+ *
+ * beads is the canonical origin for work-item state; GitHub Projects (Front Desk)
+ * is a projection. Not all projections are implemented yet — gaps appear as
+ * "No Kind", "No Milestone", etc. in the Insights charts and as empty custom
+ * fields on the board.
+ *
+ * beads edge types (see docs/beads-projection.md for the live edge graph):
+ *   parent-child    — GitHub native sub-issues (already projected)
+ *   blocks          — "Depends on" field (field exists, not yet populated from beads)
+ *   related         — no GitHub surface yet
+ *   discovered-from — no GitHub surface yet
+ */
+export interface BeadsProjectionSpec {
+  /** The beads concept being projected. */
+  readonly beadsConcept: string;
+  /** The GitHub Projects v2 field or mechanism that carries it. */
+  readonly ghField: string;
+  /** Whether this projection is currently populated on the board. */
+  readonly projected: boolean;
+  /**
+   * What populates this field today, or what tracking issue covers
+   * implementing it.
+   */
+  readonly notes: string;
+}
+
+/**
+ * The full beads→Front Desk projection map.
+ *
+ * Items with `projected: false` explain the empty chart segments:
+ *   "No Kind"      → #51 (auto-set Kind on item add)
+ *   "No Milestone" → #78 (create milestones, set date fields on epics)
+ */
+export const BEADS_PROJECTIONS: readonly BeadsProjectionSpec[] = [
+  {
+    beadsConcept: "state (open / in_progress / blocked / closed)",
+    ghField: "Status",
+    projected: true,
+    notes: "Lifecycle workflows: item added→Todo, PR linked→In Progress, closed/merged→Done. bd ready = Todo with no open Depends on.",
+  },
+  {
+    beadsConcept: "type (epic / room / door / task)",
+    ghField: "Kind",
+    projected: false,
+    notes: "Pending #51 — auto-set Kind when item lands. Charts show 'No Kind' until implemented.",
+  },
+  {
+    beadsConcept: "blocks edges (non-parent dependency)",
+    ghField: "Depends on",
+    projected: false,
+    notes: "Field exists; not yet written from beads. Manual free-text workaround only. Structured edge projection TBD.",
+  },
+  {
+    beadsConcept: "parent-child (epic → sub-issues)",
+    ghField: "Parent issue (native)",
+    projected: true,
+    notes: "Native GitHub sub-issues. Auto-add sub-issues workflow lands children on the board automatically.",
+  },
+  {
+    beadsConcept: "release / time-box",
+    ghField: "Milestone (native)",
+    projected: false,
+    notes: "Pending #78 — create milestones, set Start/Target date fields on epics. Charts show 'No Milestone' until done.",
+  },
+  {
+    beadsConcept: "related, discovered-from edges",
+    ghField: "(none)",
+    projected: false,
+    notes: "No GitHub Projects surface for these edge types. Tracked in docs/beads-projection.md for future beads export.",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Bead work-item schema — TypeScript types (compile-time contract).
+// Runtime validation lives in schema.ts (Zod). Both must stay in sync.
+// ---------------------------------------------------------------------------
+
+/** Work-item kind. Maps to the Kind field on Front Desk. */
+export type BeadKind = "epic" | "room" | "door" | "task";
+
+/**
+ * Lifecycle state. Maps to Status on Front Desk:
+ *   open → Todo, in_progress → In Progress, blocked → Blocked, closed → Done.
+ * `bd ready` = open with no open `blocks` edges.
+ */
+export type BeadState = "open" | "in_progress" | "blocked" | "closed";
+
+/** Edge type in the beads dependency graph. */
+export type BeadEdgeType = "parent-child" | "blocks" | "related" | "discovered-from";
+
+/** A single directed edge. `targetNumber` is the GitHub issue number. */
+export interface BeadEdge {
+  readonly type: BeadEdgeType;
+  readonly targetNumber: number;
+}
+
+/**
+ * A complete beads work item — the shape required for a valid projection to
+ * Front Desk. Missing any of these fields is why charts show "No Kind" or
+ * "No Milestone".
+ *
+ * `milestone` is optional (unscheduled work is valid); all other fields are
+ * required. Validate instances with `BeadWorkItemSchema` in schema.ts before
+ * projection.
+ */
+export interface BeadWorkItem {
+  /** GitHub issue number — the stable cross-system key. */
+  readonly number: number;
+  readonly title: string;
+  /** Required — absence produces "No Kind" in Insights. */
+  readonly kind: BeadKind;
+  /** Required — drives Status automation. */
+  readonly state: BeadState;
+  /** Optional — unscheduled work is valid; absence produces "No Milestone". */
+  readonly milestone?: string;
+  /** All dependency/relationship edges for this item. */
+  readonly edges: readonly BeadEdge[];
+}

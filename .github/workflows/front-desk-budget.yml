@@ -1,0 +1,31 @@
+name: front-desk-budget
+# Reusable budget circuit-breaker. A dispatching room calls this before
+# spinning up a guest; a non-zero exit means the window is spent — wait.
+# Wires budget-check.ts (the thin I/O wrapper around budgetGate() in
+# prioritization.ts). Fail-open until window-burn metering lands (#10).
+on:
+  workflow_call:
+    inputs:
+      budget_id:
+        description: "Budget id to gate against (= Front Desk milestone title)"
+        required: true
+        type: string
+      about_to_spend:
+        description: "Effort points the caller is about to spend"
+        required: false
+        default: 0
+        type: number
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with: { deno-version: v2.x }
+      - name: Evaluate budget gate
+        run: |
+          deno run budget-check.ts \
+            --budget "${{ inputs.budget_id }}" \
+            --about-to-spend "${{ inputs.about_to_spend }}"

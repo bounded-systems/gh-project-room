@@ -173,7 +173,6 @@ export const FRONT_DESK_VIEWS: readonly ViewSpec[] = [
   { name: "Ready",    layout: "TABLE",  filter: "status:Todo no:depends-on" },
   { name: "Board",    layout: "BOARD" },
   { name: "Epics",    layout: "TABLE",  filter: "kind:epic" },
-  { name: "By Repo",  layout: "TABLE",  filter: "-status:Done", groupByFieldName: "Repository" },
-  { name: "By Kind",  layout: "TABLE",  filter: "-status:Done", groupByFieldName: "Kind" },
   { name: "Blocked",  layout: "TABLE",  filter: "status:Blocked" },
+  { name: "Roadmap",  layout: "ROADMAP" },
 ];

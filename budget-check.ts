@@ -14,9 +14,9 @@
  */
 
 import {
+  budgetGate,
   type EffortPoints,
   ORG_BUDGETS,
-  budgetGate,
   planCapacity,
 } from "./prioritization.ts";
 

@@ -445,6 +445,111 @@ async function openIn(
   return out;
 }
 
+/** Field values extracted from a single board item (for score write-back). */
+export interface BoardItemFields {
+  readonly status: string | null;
+  readonly kind: string | null;
+  readonly effort: number | null;
+  readonly value: number | null;
+  readonly dependsOn: string | null;
+  readonly score: number | null;
+}
+
+/** A project item with its current field values. */
+export interface BoardItem {
+  /** ProjectV2Item node id — used as `itemId` in field-value mutations. */
+  readonly itemId: string;
+  /** Underlying Issue / PR node id. */
+  readonly contentId: string;
+  /** Issue / PR number (repo-scoped). */
+  readonly number: number;
+  readonly fields: BoardItemFields;
+}
+
+/**
+ * All items currently on the board, each with the six field values needed for
+ * score computation. Used by the score write-back step in sync.ts (#7).
+ *
+ * Draft issues (no content id or number) are silently skipped — they cannot
+ * be scored against a GitHub issue number.
+ */
+export async function boardItems(projectId: string): Promise<BoardItem[]> {
+  type FieldNode = {
+    field?: { name: string };
+    name?: string | null; // SINGLE_SELECT
+    number?: number | null; // NUMBER
+    text?: string | null; // TEXT
+  };
+  type Resp = {
+    node: {
+      items: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: Array<{
+          id: string;
+          content: { id?: string; number?: number } | null;
+          fieldValues: { nodes: FieldNode[] };
+        }>;
+      };
+    };
+  };
+  const items: BoardItem[] = [];
+  let cursor: string | null = null;
+  do {
+    const data = await gql<Resp>(
+      `query($pid:ID!,$after:String){
+        node(id:$pid){ ... on ProjectV2{
+          items(first:100,after:$after){
+            pageInfo{ hasNextPage endCursor }
+            nodes{
+              id
+              content{
+                ... on Issue{ id number }
+                ... on PullRequest{ id number }
+              }
+              fieldValues(first:20){ nodes{
+                ... on ProjectV2ItemFieldSingleSelectValue{
+                  field{ ... on ProjectV2FieldCommon{ name } } name
+                }
+                ... on ProjectV2ItemFieldNumberValue{
+                  field{ ... on ProjectV2FieldCommon{ name } } number
+                }
+                ... on ProjectV2ItemFieldTextValue{
+                  field{ ... on ProjectV2FieldCommon{ name } } text
+                }
+              } }
+            }
+          }
+        } }
+      }`,
+      { pid: projectId, after: cursor },
+    );
+    for (const n of data.node.items.nodes) {
+      if (!n.content?.id || n.content.number == null) continue;
+      const fvMap = new Map<string, FieldNode>();
+      for (const fv of n.fieldValues.nodes) {
+        if (fv.field?.name) fvMap.set(fv.field.name, fv);
+      }
+      items.push({
+        itemId: n.id,
+        contentId: n.content.id,
+        number: n.content.number,
+        fields: {
+          status: fvMap.get("Status")?.name ?? null,
+          kind: fvMap.get("Kind")?.name ?? null,
+          effort: fvMap.get("Effort")?.number ?? null,
+          value: fvMap.get("Value")?.number ?? null,
+          dependsOn: fvMap.get("Depends on")?.text ?? null,
+          score: fvMap.get("Score")?.number ?? null,
+        },
+      });
+    }
+    cursor = data.node.items.pageInfo.hasNextPage
+      ? data.node.items.pageInfo.endCursor
+      : null;
+  } while (cursor);
+  return items;
+}
+
 /** Add one issue/PR to the board. Returns the new project-item id. */
 export async function addItem(
   projectId: string,
@@ -458,6 +563,24 @@ export async function addItem(
     { pid: projectId, cid: contentId },
   );
   return data.addProjectV2ItemById.item.id;
+}
+
+/** Set a NUMBER field value on a project item (e.g. Score write-back, #7). */
+export async function setNumberValue(
+  projectId: string,
+  itemId: string,
+  fieldId: string,
+  value: number,
+): Promise<void> {
+  await gql(
+    `mutation($pid:ID!,$iid:ID!,$fid:ID!,$val:Float!){
+      updateProjectV2ItemFieldValue(input:{
+        projectId:$pid, itemId:$iid, fieldId:$fid,
+        value:{ number:$val }
+      }){ projectV2Item{ id } }
+    }`,
+    { pid: projectId, iid: itemId, fid: fieldId, val: value },
+  );
 }
 
 /**

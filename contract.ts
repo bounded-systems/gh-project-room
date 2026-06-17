@@ -258,6 +258,10 @@ export interface WorkflowSpec {
 /**
  * The built-in workflows and their desired state on Front Desk.
  *
+ * IMPORTANT: Only the 6 workflows below are exposed by the GraphQL
+ * `projectV2Workflows` query. The remaining 5 appear in the GitHub Projects UI
+ * but are NOT returned by the API — see `FRONT_DESK_WORKFLOWS_UI_ONLY` below.
+ *
  * Enabled:
  *   - Auto-add sub-issues: sub-issues of tracked epics land on the board automatically.
  *   - Item closed: sets Status → Done when an issue/PR is closed (see #52).
@@ -266,23 +270,35 @@ export interface WorkflowSpec {
  *   - Pull request linked to issue: surfaces PR↔issue relationships.
  *
  * Disabled:
- *   - Auto-add to project: our sweep (orgOpenWorkItems) handles this more precisely.
- *   - Auto-archive items: we want closed items to stay visible (Status=Done, not archived).
- *   - Auto-close issue, Code changes requested, Code review approved, Item reopened:
- *     not yet wired — revisit when Status automation is fuller.
+ *   - Auto-close issue: not yet wired — revisit when Status automation is fuller.
+ *     Currently DRIFT (live=true) — toggle off via Front Desk UI Workflows tab.
  */
 export const FRONT_DESK_WORKFLOWS: readonly WorkflowSpec[] = [
   { name: "Auto-add sub-issues to project", enabled: true },
-  { name: "Item closed",                    enabled: true },
-  { name: "Item added to project",          enabled: true },
-  { name: "Pull request merged",            enabled: true },
-  { name: "Pull request linked to issue",   enabled: true },
-  { name: "Auto-add to project",            enabled: false },
-  { name: "Auto-archive items",             enabled: false },
   { name: "Auto-close issue",               enabled: false },
-  { name: "Code changes requested",         enabled: false },
-  { name: "Code review approved",           enabled: false },
-  { name: "Item reopened",                  enabled: false },
+  { name: "Item added to project",          enabled: true },
+  { name: "Item closed",                    enabled: true },
+  { name: "Pull request linked to issue",   enabled: true },
+  { name: "Pull request merged",            enabled: true },
+];
+
+/**
+ * Built-in workflow names that appear in the GitHub Projects UI (Workflows tab)
+ * but are NOT returned by the `projectV2Workflows` GraphQL query. The sweep
+ * cannot check or toggle these — manage them manually via the UI.
+ *
+ * Desired state:
+ *   - Auto-add to project: DISABLED — our sweep (orgOpenWorkItems) handles this.
+ *   - Auto-archive items: DISABLED — we want closed items visible (Status=Done).
+ *   - Code changes requested, Code review approved, Item reopened: DISABLED —
+ *     not yet wired; revisit when Status automation is fuller.
+ */
+export const FRONT_DESK_WORKFLOWS_UI_ONLY: readonly string[] = [
+  "Auto-add to project",
+  "Auto-archive items",
+  "Code changes requested",
+  "Code review approved",
+  "Item reopened",
 ];
 
 /**

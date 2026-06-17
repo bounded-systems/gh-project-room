@@ -171,91 +171,18 @@ export async function applyField(project: Project, spec: FieldSpec): Promise<App
   return { field: spec.name, action: "exists" };
 }
 
-const LAYOUT_ENUM: Record<string, string> = {
-  TABLE: "TABLE_LAYOUT",
-  BOARD: "BOARD_LAYOUT",
-  ROADMAP: "ROADMAP_LAYOUT",
-};
-
-export type ViewApplyResult =
-  | { view: string; action: "exists" }
-  | { view: string; action: "created" }
-  | { view: string; action: "updated" };
-
 /**
- * Reconcile one view spec against the live project (idempotent).
- * Creates the view if it doesn't exist; updates layout/filter/grouping if it
- * drifts. The default "View 1" is renamed to the first view spec whose name
- * doesn't already exist (handles the Lobby rename case).
+ * Check whether a view exists on the project. Returns "exists" or "missing".
+ * GitHub Projects v2 does not expose createProjectV2View / updateProjectV2View
+ * mutations in the public API — views must be created and configured via the
+ * UI. This function is read-only: it reports drift for manual action.
  */
-export async function applyView(project: Project, spec: import("./contract.ts").ViewSpec): Promise<ViewApplyResult> {
-  const layoutEnum = LAYOUT_ENUM[spec.layout] ?? "TABLE_LAYOUT";
-  const existing = project.views.find((v) => v.name === spec.name);
-
-  // Look up groupBy field id if requested
-  let groupByFieldIds: string[] | undefined;
-  if (spec.groupByFieldName) {
-    const f = project.fields.find((f) => f.name === spec.groupByFieldName);
-    if (f) groupByFieldIds = [f.id];
-  }
-
-  if (!existing) {
-    // Check if there's a stale default "View 1" we should rename instead of creating new
-    const defaultView = project.views.find((v) => v.name === "View 1");
-    if (defaultView) {
-      await gql(
-        `mutation($pid:ID!,$vid:ID!,$name:String!,$layout:ProjectV2ViewLayout!){
-          updateProjectV2View(input:{ projectId:$pid, viewId:$vid, name:$name, layout:$layout }){
-            projectView{ id }
-          }
-        }`,
-        { pid: project.id, vid: defaultView.id, name: spec.name, layout: layoutEnum },
-      );
-    } else {
-      type CR = { createProjectV2View: { projectView: { id: string } } };
-      const created = await gql<CR>(
-        `mutation($pid:ID!,$name:String!,$layout:ProjectV2ViewLayout!){
-          createProjectV2View(input:{ projectId:$pid, name:$name, layout:$layout }){
-            projectView{ id }
-          }
-        }`,
-        { pid: project.id, name: spec.name, layout: layoutEnum },
-      );
-      // Apply filter + groupBy on the freshly created view
-      const vid = created.createProjectV2View.projectView.id;
-      if (spec.filter || groupByFieldIds) {
-        await gql(
-          `mutation($pid:ID!,$vid:ID!${spec.filter ? ",$fq:String!" : ""}${groupByFieldIds ? ",$gb:[ID!]!" : ""}){
-            updateProjectV2View(input:{ projectId:$pid, viewId:$vid
-              ${spec.filter ? ",filterQuery:$fq" : ""}
-              ${groupByFieldIds ? ",groupByFieldIds:$gb" : ""}
-            }){ projectView{ id } }
-          }`,
-          {
-            pid: project.id,
-            vid,
-            ...(spec.filter ? { fq: spec.filter } : {}),
-            ...(groupByFieldIds ? { gb: groupByFieldIds } : {}),
-          },
-        );
-      }
-    }
-    return { view: spec.name, action: existing ? "updated" : "created" };
-  }
-
-  // View exists — check if layout needs updating
-  if (existing.layout !== layoutEnum) {
-    await gql(
-      `mutation($pid:ID!,$vid:ID!,$layout:ProjectV2ViewLayout!){
-        updateProjectV2View(input:{ projectId:$pid, viewId:$vid, layout:$layout }){
-          projectView{ id }
-        }
-      }`,
-      { pid: project.id, vid: existing.id, layout: layoutEnum },
-    );
-    return { view: spec.name, action: "updated" };
-  }
-  return { view: spec.name, action: "exists" };
+export function checkView(
+  project: Project,
+  spec: import("./contract.ts").ViewSpec,
+): { view: string; action: "exists" | "missing" } {
+  const exists = project.views.some((v) => v.name === spec.name);
+  return { view: spec.name, action: exists ? "exists" : "missing" };
 }
 
 /** All issue/PR content node-ids already on the board (paged). For dedupe. */

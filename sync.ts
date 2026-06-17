@@ -18,7 +18,7 @@ import { FRONT_DESK_FIELDS, FRONT_DESK_VIEWS } from "./contract.ts";
 import {
   addItem,
   applyField,
-  applyView,
+  checkView,
   existingContentIds,
   getProject,
   linkRepoToProject,
@@ -68,15 +68,15 @@ async function main(): Promise<void> {
     }
   }
 
-  // 2. reconcile views
+  // 2. report view status (GitHub Projects v2 API has no create/update view
+  //    mutations — views must be added via the UI; this logs what's missing)
   for (const spec of FRONT_DESK_VIEWS) {
-    if (dryRun) {
-      const present = project.views.some((v) => v.name === spec.name);
-      log(`view "${spec.name}": ${present ? "present" : "would create"}`);
-      continue;
+    const r = checkView(project, spec);
+    if (r.action === "missing") {
+      log(`view "${r.view}": MISSING — add via Front Desk UI (+ New view)`);
+    } else {
+      log(`view "${r.view}": exists`);
     }
-    const r = await applyView(project, spec);
-    log(`view "${r.view}": ${r.action}`);
   }
 
   // 3. sweep all repos and add anything missing

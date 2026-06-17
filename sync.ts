@@ -36,7 +36,8 @@ import {
 
 async function main(): Promise<void> {
   const dryRun = Deno.env.get("DRY_RUN") === "1";
-  const log = (m: string): void => console.log(`${dryRun ? "[dry-run] " : ""}${m}`);
+  const log = (m: string): void =>
+    console.log(`${dryRun ? "[dry-run] " : ""}${m}`);
 
   const project = await getProject();
   log(`Front Desk: "${project.title}" (${project.id})`);
@@ -56,7 +57,9 @@ async function main(): Promise<void> {
     }
     const linked = repos.map((r) => r.name).filter((n) => !failed.includes(n));
     if (linked.length) log(`linked: ${linked.join(", ")}`);
-    if (failed.length) log(`link skipped (needs repo admin on App): ${failed.join(", ")}`);
+    if (failed.length) {
+      log(`link skipped (needs repo admin on App): ${failed.join(", ")}`);
+    }
   } else {
     log(`would link: ${repos.map((r) => r.name).join(", ")}`);
   }
@@ -70,7 +73,11 @@ async function main(): Promise<void> {
     }
     const r = await applyField(project, spec);
     if (r.action === "needs-manual") {
-      log(`field "${r.field}": MANUAL — add option(s) in the UI: ${r.missingOptions.join(", ")}`);
+      log(
+        `field "${r.field}": MANUAL — add option(s) in the UI: ${
+          r.missingOptions.join(", ")
+        }`,
+      );
     } else {
       log(`field "${r.field}": ${r.action}`);
     }
@@ -81,7 +88,9 @@ async function main(): Promise<void> {
   for (const spec of FRONT_DESK_WORKFLOWS) {
     const r = checkWorkflow(project, spec);
     if (r.action === "drift") {
-      log(`workflow "${r.workflow}": DRIFT (live=${r.live}, want=${r.want}) — toggle via Front Desk UI Workflows tab`);
+      log(
+        `workflow "${r.workflow}": DRIFT (live=${r.live}, want=${r.want}) — toggle via Front Desk UI Workflows tab`,
+      );
     } else {
       log(`workflow "${r.workflow}": ${r.action}`);
     }
@@ -102,7 +111,11 @@ async function main(): Promise<void> {
   const onBoard = await existingContentIds(project.id);
   const work = await orgOpenWorkItems();
   const missing = work.filter((w) => !onBoard.has(w.id));
-  log(`open items: ${work.length}, already on board: ${work.length - missing.length}, to add: ${missing.length}`);
+  log(
+    `open items: ${work.length}, already on board: ${
+      work.length - missing.length
+    }, to add: ${missing.length}`,
+  );
 
   // Resolve the Kind field for auto-classification (#51). It may have just been
   // created in step 1, so the getProject() snapshot can predate it — re-fetch
@@ -110,7 +123,9 @@ async function main(): Promise<void> {
   // idempotent and never clobbers a manually-chosen value.
   let kindField = project.fields.find((f) => f.name === TYPE_FIELD.name);
   if (!dryRun && !kindField) {
-    kindField = (await getProject()).fields.find((f) => f.name === TYPE_FIELD.name);
+    kindField = (await getProject()).fields.find((f) =>
+      f.name === TYPE_FIELD.name
+    );
   }
   const kindOptionId = (name: string): string | undefined =>
     kindField?.options.find((o) => o.name === name)?.id;
@@ -119,7 +134,9 @@ async function main(): Promise<void> {
   for (const w of missing) {
     const kind = classifyKind(w);
     if (dryRun) {
-      log(`would add ${w.kind} ${w.repo}#${w.number} — ${w.title} [Kind→${kind}]`);
+      log(
+        `would add ${w.kind} ${w.repo}#${w.number} — ${w.title} [Kind→${kind}]`,
+      );
       continue;
     }
     const itemId = await addItem(project.id, w.id);
@@ -129,7 +146,9 @@ async function main(): Promise<void> {
       await setSingleSelectValue(project.id, itemId, kindField.id, oid);
       log(`added ${w.kind} ${w.repo}#${w.number} [Kind→${kind}]`);
     } else {
-      log(`added ${w.kind} ${w.repo}#${w.number} (Kind field unavailable — set manually)`);
+      log(
+        `added ${w.kind} ${w.repo}#${w.number} (Kind field unavailable — set manually)`,
+      );
     }
   }
   log(`done — ${dryRun ? "0 (dry-run)" : added} added.`);

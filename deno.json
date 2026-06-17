@@ -1,0 +1,16 @@
+{
+  "imports": {
+    "zod": "npm:zod@3"
+  },
+  "tasks": {
+    "check": "deno check contract.ts prioritization.ts schema.ts",
+    "fmt": "deno fmt",
+    "lint": "deno lint"
+  },
+  "fmt": {
+    "include": ["*.ts"]
+  },
+  "lint": {
+    "include": ["*.ts"]
+  }
+}

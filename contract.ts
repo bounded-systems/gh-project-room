@@ -89,8 +89,16 @@ export const TYPE_FIELD: SingleSelectFieldSpec = {
       description:
         "Business-behavior contract: a parent issue whose sub-issues are the work.",
     },
-    { name: "room", color: "BLUE", description: "A process — a bounded, running execution context." },
-    { name: "door", color: "PURPLE", description: "A set of capabilities a room acts through." },
+    {
+      name: "room",
+      color: "BLUE",
+      description: "A process — a bounded, running execution context.",
+    },
+    {
+      name: "door",
+      color: "PURPLE",
+      description: "A set of capabilities a room acts through.",
+    },
     { name: "task", color: "GRAY", description: "Ordinary work item." },
   ],
 };
@@ -109,14 +117,27 @@ export const STATUS_FIELD: SingleSelectFieldSpec = {
   name: "Status",
   builtIn: true,
   options: [
-    { name: "Todo", color: "GRAY", description: "Open, not started (bead: open)." },
-    { name: "In progress", color: "BLUE", description: "Being worked (bead: in_progress)." },
+    {
+      name: "Todo",
+      color: "GRAY",
+      description: "Open, not started (bead: open).",
+    },
+    {
+      name: "In progress",
+      color: "BLUE",
+      description: "Being worked (bead: in_progress).",
+    },
     {
       name: "Blocked",
       color: "RED",
-      description: "Has an open blocker (bead: blocked; excluded from `bd ready`).",
+      description:
+        "Has an open blocker (bead: blocked; excluded from `bd ready`).",
     },
-    { name: "Done", color: "GREEN", description: "Closed or merged (bead: closed)." },
+    {
+      name: "Done",
+      color: "GREEN",
+      description: "Closed or merged (bead: closed).",
+    },
   ],
 };
 
@@ -340,11 +361,31 @@ export interface WorkflowSpec {
  */
 export const FRONT_DESK_WORKFLOWS: readonly WorkflowSpec[] = [
   { name: "Auto-add sub-issues to project", enabled: true },
-  { name: "Auto-close issue",               enabled: false },
-  { name: "Item added to project",          enabled: true,  action: "Set value", setValue: "Status: Todo" },
-  { name: "Item closed",                    enabled: true,  action: "Set value", setValue: "Status: Done" },
-  { name: "Pull request linked to issue",   enabled: true,  action: "Set value", setValue: "Status: In Progress" },
-  { name: "Pull request merged",            enabled: true,  action: "Set value", setValue: "Status: Done" },
+  { name: "Auto-close issue", enabled: false },
+  {
+    name: "Item added to project",
+    enabled: true,
+    action: "Set value",
+    setValue: "Status: Todo",
+  },
+  {
+    name: "Item closed",
+    enabled: true,
+    action: "Set value",
+    setValue: "Status: Done",
+  },
+  {
+    name: "Pull request linked to issue",
+    enabled: true,
+    action: "Set value",
+    setValue: "Status: In Progress",
+  },
+  {
+    name: "Pull request merged",
+    enabled: true,
+    action: "Set value",
+    setValue: "Status: Done",
+  },
 ];
 
 /**
@@ -483,37 +524,43 @@ export const BEADS_PROJECTIONS: readonly BeadsProjectionSpec[] = [
     beadsConcept: "state (open / in_progress / blocked / closed)",
     ghField: "Status",
     projected: true,
-    notes: "Lifecycle workflows: item added→Todo, PR linked→In Progress, closed/merged→Done. bd ready = Todo with no open Depends on.",
+    notes:
+      "Lifecycle workflows: item added→Todo, PR linked→In Progress, closed/merged→Done. bd ready = Todo with no open Depends on.",
   },
   {
     beadsConcept: "type (epic / room / door / task)",
     ghField: "Kind",
     projected: false,
-    notes: "Pending #51 — auto-set Kind when item lands. Charts show 'No Kind' until implemented.",
+    notes:
+      "Pending #51 — auto-set Kind when item lands. Charts show 'No Kind' until implemented.",
   },
   {
     beadsConcept: "blocks edges (non-parent dependency)",
     ghField: "Depends on",
     projected: false,
-    notes: "Field exists; not yet written from beads. Manual free-text workaround only. Structured edge projection TBD.",
+    notes:
+      "Field exists; not yet written from beads. Manual free-text workaround only. Structured edge projection TBD.",
   },
   {
     beadsConcept: "parent-child (epic → sub-issues)",
     ghField: "Parent issue (native)",
     projected: true,
-    notes: "Native GitHub sub-issues. Auto-add sub-issues workflow lands children on the board automatically.",
+    notes:
+      "Native GitHub sub-issues. Auto-add sub-issues workflow lands children on the board automatically.",
   },
   {
     beadsConcept: "release / time-box",
     ghField: "Milestone (native)",
     projected: false,
-    notes: "Pending #78 — create milestones, set Start/Target date fields on epics. Charts show 'No Milestone' until done.",
+    notes:
+      "Pending #78 — create milestones, set Start/Target date fields on epics. Charts show 'No Milestone' until done.",
   },
   {
     beadsConcept: "related, discovered-from edges",
     ghField: "(none)",
     projected: false,
-    notes: "No GitHub Projects surface for these edge types. Tracked in docs/beads-projection.md for future beads export.",
+    notes:
+      "No GitHub Projects surface for these edge types. Tracked in docs/beads-projection.md for future beads export.",
   },
 ];
 
@@ -533,7 +580,11 @@ export type BeadKind = "epic" | "room" | "door" | "task";
 export type BeadState = "open" | "in_progress" | "blocked" | "closed";
 
 /** Edge type in the beads dependency graph. */
-export type BeadEdgeType = "parent-child" | "blocks" | "related" | "discovered-from";
+export type BeadEdgeType =
+  | "parent-child"
+  | "blocks"
+  | "related"
+  | "discovered-from";
 
 /** A single directed edge. `targetNumber` is the GitHub issue number. */
 export interface BeadEdge {

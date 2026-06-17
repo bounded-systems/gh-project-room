@@ -15,8 +15,13 @@
  * identical to the BeadWorkItem interface in contract.ts.
  */
 
-import { z } from "npm:zod@3";
-import type { BeadEdge, BeadEdgeType, BeadKind, BeadState } from "./contract.ts";
+import { z } from "zod";
+import type {
+  BeadEdge,
+  BeadEdgeType,
+  BeadKind,
+  BeadState,
+} from "./contract.ts";
 
 export const BeadKindSchema: z.ZodType<BeadKind> = z.enum([
   "epic",

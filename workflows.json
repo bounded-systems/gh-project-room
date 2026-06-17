@@ -1,0 +1,13 @@
+[
+  { "name": "Auto-add sub-issues to project", "enabled": true },
+  { "name": "Item closed",                    "enabled": true },
+  { "name": "Item added to project",          "enabled": true },
+  { "name": "Pull request merged",            "enabled": true },
+  { "name": "Pull request linked to issue",   "enabled": true },
+  { "name": "Auto-add to project",            "enabled": false },
+  { "name": "Auto-archive items",             "enabled": false },
+  { "name": "Auto-close issue",               "enabled": false },
+  { "name": "Code changes requested",         "enabled": false },
+  { "name": "Code review approved",           "enabled": false },
+  { "name": "Item reopened",                  "enabled": false }
+]

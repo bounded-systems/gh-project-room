@@ -240,3 +240,68 @@ export const FRONT_DESK_VIEWS: readonly ViewSpec[] = [
     zoomLevel: "Month",
   },
 ];
+
+/**
+ * Built-in workflow spec for Projects v2.
+ *
+ * GitHub exposes these via the `projectV2Workflows` GraphQL connection.
+ * The `updateProjectV2Workflow` mutation can enable/disable them — the sweep
+ * reconciles `enabled` state idempotently.
+ *
+ * `name` must match the GitHub UI label exactly (case-sensitive).
+ */
+export interface WorkflowSpec {
+  readonly name: string;
+  readonly enabled: boolean;
+}
+
+/**
+ * The built-in workflows and their desired state on Front Desk.
+ *
+ * Enabled:
+ *   - Auto-add sub-issues: sub-issues of tracked epics land on the board automatically.
+ *   - Item closed: sets Status → Done when an issue/PR is closed (see #52).
+ *   - Item added to project: fires when any item lands; used for auto-Kind assignment (#51).
+ *   - Pull request merged: fires on merge; keeps Status in sync.
+ *   - Pull request linked to issue: surfaces PR↔issue relationships.
+ *
+ * Disabled:
+ *   - Auto-add to project: our sweep (orgOpenWorkItems) handles this more precisely.
+ *   - Auto-archive items: we want closed items to stay visible (Status=Done, not archived).
+ *   - Auto-close issue, Code changes requested, Code review approved, Item reopened:
+ *     not yet wired — revisit when Status automation is fuller.
+ */
+export const FRONT_DESK_WORKFLOWS: readonly WorkflowSpec[] = [
+  { name: "Auto-add sub-issues to project", enabled: true },
+  { name: "Item closed",                    enabled: true },
+  { name: "Item added to project",          enabled: true },
+  { name: "Pull request merged",            enabled: true },
+  { name: "Pull request linked to issue",   enabled: true },
+  { name: "Auto-add to project",            enabled: false },
+  { name: "Auto-archive items",             enabled: false },
+  { name: "Auto-close issue",               enabled: false },
+  { name: "Code changes requested",         enabled: false },
+  { name: "Code review approved",           enabled: false },
+  { name: "Item reopened",                  enabled: false },
+];
+
+/**
+ * Insights charts are UI-only — GitHub Projects v2 exposes no GraphQL
+ * mutations to create or configure them. Document the desired charts here
+ * for drift-detection; the sweep reports MISSING for manual action.
+ *
+ * Default charts (always present): Burn up.
+ * Custom charts: add via Front Desk → Insights → + New chart.
+ */
+export interface InsightChartSpec {
+  readonly name: string;
+  readonly type: "BURN_UP" | "BURN_DOWN" | "STACKED_AREA" | "COLUMN" | "LINE";
+  /** GraphQL filter string — same syntax as the UI search bar. */
+  readonly filter?: string;
+}
+
+export const FRONT_DESK_INSIGHTS: readonly InsightChartSpec[] = [
+  { name: "Burn up",            type: "BURN_UP",       filter: "is:issue" },
+  { name: "Status breakdown",   type: "STACKED_AREA",  filter: "is:issue" },
+  { name: "Cycle time",         type: "COLUMN",        filter: "is:issue status:Done" },
+];

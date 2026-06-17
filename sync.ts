@@ -14,10 +14,11 @@
  *       DRY_RUN=1     preview only — reconcile read-only, add nothing
  */
 
-import { FRONT_DESK_FIELDS, FRONT_DESK_VIEWS } from "./contract.ts";
+import { FRONT_DESK_FIELDS, FRONT_DESK_VIEWS, FRONT_DESK_WORKFLOWS } from "./contract.ts";
 import {
   addItem,
   applyField,
+  applyWorkflow,
   checkView,
   existingContentIds,
   getProject,
@@ -68,7 +69,20 @@ async function main(): Promise<void> {
     }
   }
 
-  // 2. report view status (GitHub Projects v2 API has no create/update view
+  // 2. reconcile built-in workflows (enable/disable via updateProjectV2Workflow)
+  for (const spec of FRONT_DESK_WORKFLOWS) {
+    if (dryRun) {
+      const w = project.workflows.find((w) => w.name === spec.name);
+      if (!w) { log(`workflow "${spec.name}": not-found`); continue; }
+      const drift = w.enabled !== spec.enabled;
+      log(`workflow "${spec.name}": ${drift ? `drift (live=${w.enabled}, want=${spec.enabled})` : "ok"}`);
+      continue;
+    }
+    const r = await applyWorkflow(project, spec);
+    log(`workflow "${r.workflow}": ${r.action}`);
+  }
+
+  // 3. report view status (GitHub Projects v2 API has no create/update view
   //    mutations — views must be added via the UI; this logs what's missing)
   for (const spec of FRONT_DESK_VIEWS) {
     const r = checkView(project, spec);
@@ -79,7 +93,7 @@ async function main(): Promise<void> {
     }
   }
 
-  // 3. sweep all repos and add anything missing
+  // 4. sweep all repos and add anything missing
   const onBoard = await existingContentIds(project.id);
   const work = await orgOpenWorkItems();
   const missing = work.filter((w) => !onBoard.has(w.id));

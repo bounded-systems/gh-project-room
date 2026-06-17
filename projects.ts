@@ -17,6 +17,7 @@ import {
   ORG,
   PROJECT_NUMBER,
   type SingleSelectFieldSpec,
+  type WorkflowSpec,
 } from "./contract.ts";
 
 const GRAPHQL_ENDPOINT = "https://api.github.com/graphql";
@@ -64,14 +65,20 @@ export interface ExistingView {
   readonly name: string;
   readonly layout: string;
 }
+export interface ExistingWorkflow {
+  readonly id: string;
+  readonly name: string;
+  readonly enabled: boolean;
+}
 export interface Project {
   readonly id: string;
   readonly title: string;
   readonly fields: readonly ExistingField[];
   readonly views: readonly ExistingView[];
+  readonly workflows: readonly ExistingWorkflow[];
 }
 
-/** Resolve Front Desk (org project #2) → node id, title, fields, and views. */
+/** Resolve Front Desk (org project #2) → node id, title, fields, views, and workflows. */
 export async function getProject(): Promise<Project> {
   type Resp = {
     organization: {
@@ -86,6 +93,9 @@ export async function getProject(): Promise<Project> {
         views: {
           nodes: Array<{ id: string; name: string; layout: string }>;
         };
+        workflows: {
+          nodes: Array<{ id: string; name: string; enabled: boolean }>;
+        };
       };
     };
   };
@@ -99,6 +109,7 @@ export async function getProject(): Promise<Project> {
             ... on ProjectV2SingleSelectField { options{ id name } }
           } }
           views(first:50){ nodes{ id name layout } }
+          workflows(first:50){ nodes{ id name enabled } }
         }
       }
     }`,
@@ -115,6 +126,11 @@ export async function getProject(): Promise<Project> {
       options: f.options ?? [],
     })),
     views: p.views.nodes.map((v) => ({ id: v.id, name: v.name, layout: v.layout })),
+    workflows: (p.workflows?.nodes ?? []).map((w) => ({
+      id: w.id,
+      name: w.name,
+      enabled: w.enabled,
+    })),
   };
 }
 
@@ -183,6 +199,37 @@ export function checkView(
 ): { view: string; action: "exists" | "missing" } {
   const exists = project.views.some((v) => v.name === spec.name);
   return { view: spec.name, action: exists ? "exists" : "missing" };
+}
+
+export type WorkflowResult =
+  | { workflow: string; action: "ok" }
+  | { workflow: string; action: "enabled" }
+  | { workflow: string; action: "disabled" }
+  | { workflow: string; action: "not-found" };
+
+/**
+ * Reconcile one workflow spec against the live project.
+ * Uses `updateProjectV2Workflow` to flip `enabled` if it doesn't match.
+ * Falls back to "not-found" if the workflow name isn't on the project
+ * (GitHub may not surface all workflows on all plan types).
+ */
+export async function applyWorkflow(
+  project: Project,
+  spec: WorkflowSpec,
+): Promise<WorkflowResult> {
+  const existing = project.workflows.find((w) => w.name === spec.name);
+  if (!existing) return { workflow: spec.name, action: "not-found" };
+  if (existing.enabled === spec.enabled) return { workflow: spec.name, action: "ok" };
+
+  await gql(
+    `mutation($wid:ID!,$enabled:Boolean!){
+      updateProjectV2Workflow(input:{ workflowId:$wid, enabled:$enabled }){
+        workflow{ id enabled }
+      }
+    }`,
+    { wid: existing.id, enabled: spec.enabled },
+  );
+  return { workflow: spec.name, action: spec.enabled ? "enabled" : "disabled" };
 }
 
 /** All issue/PR content node-ids already on the board (paged). For dedupe. */

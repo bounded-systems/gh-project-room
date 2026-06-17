@@ -1,0 +1,40 @@
+[
+  {
+    "name": "Lobby",
+    "layout": "TABLE",
+    "filter": "-status:Blocked -status:Done",
+    "sortBy": "Status",
+    "showHierarchy": true
+  },
+  {
+    "name": "Ready",
+    "layout": "TABLE",
+    "filter": "status:Todo no:depends-on",
+    "sliceBy": "Kind"
+  },
+  {
+    "name": "Board",
+    "layout": "BOARD",
+    "columnBy": "Status",
+    "swimlanes": "Milestone"
+  },
+  {
+    "name": "Epics",
+    "layout": "TABLE",
+    "filter": "kind:epic",
+    "groupBy": "Milestone",
+    "showHierarchy": true
+  },
+  {
+    "name": "Blocked",
+    "layout": "TABLE",
+    "filter": "status:Blocked",
+    "sortBy": "Status"
+  },
+  {
+    "name": "Roadmap",
+    "layout": "ROADMAP",
+    "dates": "Start date and Target date",
+    "zoomLevel": "Month"
+  }
+]

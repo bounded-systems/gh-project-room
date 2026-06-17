@@ -1,0 +1,29 @@
+[
+  {
+    "kind": "SINGLE_SELECT",
+    "name": "Kind",
+    "builtIn": false,
+    "options": [
+      { "name": "epic",  "color": "YELLOW", "description": "Business-behavior contract: a parent issue whose sub-issues are the work." },
+      { "name": "room",  "color": "BLUE",   "description": "A process — a bounded, running execution context." },
+      { "name": "door",  "color": "PURPLE", "description": "A set of capabilities a room acts through." },
+      { "name": "task",  "color": "GRAY",   "description": "Ordinary work item." }
+    ]
+  },
+  {
+    "kind": "SINGLE_SELECT",
+    "name": "Status",
+    "builtIn": true,
+    "options": [
+      { "name": "Todo",        "color": "GRAY",  "description": "Open, not started (bead: open)." },
+      { "name": "In progress", "color": "BLUE",  "description": "Being worked (bead: in_progress)." },
+      { "name": "Blocked",     "color": "RED",   "description": "Has an open blocker (bead: blocked; excluded from `bd ready`)." },
+      { "name": "Done",        "color": "GREEN", "description": "Closed or merged (bead: closed)." }
+    ]
+  },
+  {
+    "kind": "TEXT",
+    "name": "Depends on",
+    "builtIn": false
+  }
+]

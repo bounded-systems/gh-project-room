@@ -34,13 +34,21 @@ async function main(): Promise<void> {
   log(`Front Desk: "${project.title}" (${project.id})`);
 
   // 0. link all org repos to the project (idempotent — adds the Projects tab to each repo)
+  // Requires repository admin access on the App; skipped gracefully if not granted.
   const repos = await orgRepos();
   log(`linking ${repos.length} repos to Front Desk…`);
   if (!dryRun) {
+    const failed: string[] = [];
     for (const repo of repos) {
-      await linkRepoToProject(project.id, repo.id);
+      try {
+        await linkRepoToProject(project.id, repo.id);
+      } catch {
+        failed.push(repo.name);
+      }
     }
-    log(`linked: ${repos.map((r) => r.name).join(", ")}`);
+    const linked = repos.map((r) => r.name).filter((n) => !failed.includes(n));
+    if (linked.length) log(`linked: ${linked.join(", ")}`);
+    if (failed.length) log(`link skipped (needs repo admin on App): ${failed.join(", ")}`);
   } else {
     log(`would link: ${repos.map((r) => r.name).join(", ")}`);
   }

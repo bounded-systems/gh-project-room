@@ -24,12 +24,17 @@ const GRAPHQL_ENDPOINT = "https://api.github.com/graphql";
 
 function token(): string {
   const t = Deno.env.get("GITHUB_TOKEN");
-  if (!t) throw new Error("GITHUB_TOKEN is not set (mint the App token first).");
+  if (!t) {
+    throw new Error("GITHUB_TOKEN is not set (mint the App token first).");
+  }
   return t;
 }
 
 /** Minimal typed GraphQL caller. Throws on transport or GraphQL errors. */
-async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+async function gql<T>(
+  query: string,
+  variables: Record<string, unknown>,
+): Promise<T> {
   const res = await fetch(GRAPHQL_ENDPOINT, {
     method: "POST",
     headers: {
@@ -42,9 +47,14 @@ async function gql<T>(query: string, variables: Record<string, unknown>): Promis
   if (!res.ok) {
     throw new Error(`GraphQL HTTP ${res.status}: ${await res.text()}`);
   }
-  const body = await res.json() as { data?: T; errors?: Array<{ message: string }> };
+  const body = await res.json() as {
+    data?: T;
+    errors?: Array<{ message: string }>;
+  };
   if (body.errors?.length) {
-    throw new Error(`GraphQL errors: ${body.errors.map((e) => e.message).join("; ")}`);
+    throw new Error(
+      `GraphQL errors: ${body.errors.map((e) => e.message).join("; ")}`,
+    );
   }
   if (!body.data) throw new Error("GraphQL response had no data.");
   return body.data;
@@ -87,7 +97,12 @@ export async function getProject(): Promise<Project> {
         title: string;
         fields: {
           nodes: Array<
-            { id: string; name: string; dataType: string; options?: ExistingOption[] }
+            {
+              id: string;
+              name: string;
+              dataType: string;
+              options?: ExistingOption[];
+            }
           >;
         };
         views: {
@@ -125,7 +140,11 @@ export async function getProject(): Promise<Project> {
       dataType: f.dataType,
       options: f.options ?? [],
     })),
-    views: p.views.nodes.map((v) => ({ id: v.id, name: v.name, layout: v.layout })),
+    views: p.views.nodes.map((v) => ({
+      id: v.id,
+      name: v.name,
+      layout: v.layout,
+    })),
     workflows: (p.workflows?.nodes ?? []).map((w) => ({
       id: w.id,
       name: w.name,
@@ -136,7 +155,11 @@ export async function getProject(): Promise<Project> {
 
 function singleSelectOptionsLiteral(field: SingleSelectFieldSpec): string {
   return field.options
-    .map((o) => `{name:${JSON.stringify(o.name)},color:${o.color},description:${JSON.stringify(o.description)}}`)
+    .map((o) =>
+      `{name:${JSON.stringify(o.name)},color:${o.color},description:${
+        JSON.stringify(o.description)
+      }}`
+    )
     .join(",");
 }
 
@@ -152,7 +175,10 @@ export type ApplyResult =
  *    EXISTING field has no clean Projects v2 mutation, so those are surfaced for
  *    a one-time UI add rather than silently dropped.
  */
-export async function applyField(project: Project, spec: FieldSpec): Promise<ApplyResult> {
+export async function applyField(
+  project: Project,
+  spec: FieldSpec,
+): Promise<ApplyResult> {
   const existing = project.fields.find((f) => f.name === spec.name);
 
   if (!existing) {
@@ -160,7 +186,9 @@ export async function applyField(project: Project, spec: FieldSpec): Promise<App
       await gql(
         `mutation($pid:ID!){
           createProjectV2Field(input:{
-            projectId:$pid, dataType:SINGLE_SELECT, name:${JSON.stringify(spec.name)},
+            projectId:$pid, dataType:SINGLE_SELECT, name:${
+          JSON.stringify(spec.name)
+        },
             singleSelectOptions:[${singleSelectOptionsLiteral(spec)}]
           }){ projectV2Field{ ... on ProjectV2SingleSelectField{ id } } }
         }`,
@@ -171,7 +199,9 @@ export async function applyField(project: Project, spec: FieldSpec): Promise<App
       // enum values, so the dataType interpolates directly.
       await gql(
         `mutation($pid:ID!){
-          createProjectV2Field(input:{ projectId:$pid, dataType:${spec.kind}, name:${JSON.stringify(spec.name)} }){
+          createProjectV2Field(input:{ projectId:$pid, dataType:${spec.kind}, name:${
+          JSON.stringify(spec.name)
+        } }){
             projectV2Field{ ... on ProjectV2Field{ id } }
           }
         }`,
@@ -183,8 +213,15 @@ export async function applyField(project: Project, spec: FieldSpec): Promise<App
 
   if (spec.kind === "SINGLE_SELECT") {
     const have = new Set(existing.options.map((o) => o.name.toLowerCase()));
-    const missing = spec.options.filter((o) => !have.has(o.name.toLowerCase())).map((o) => o.name);
-    if (missing.length) return { field: spec.name, action: "needs-manual", missingOptions: missing };
+    const missing = spec.options.filter((o) => !have.has(o.name.toLowerCase()))
+      .map((o) => o.name);
+    if (missing.length) {
+      return {
+        field: spec.name,
+        action: "needs-manual",
+        missingOptions: missing,
+      };
+    }
   }
   return { field: spec.name, action: "exists" };
 }
@@ -221,12 +258,21 @@ export function checkWorkflow(
 ): WorkflowResult {
   const existing = project.workflows.find((w) => w.name === spec.name);
   if (!existing) return { workflow: spec.name, action: "not-found" };
-  if (existing.enabled === spec.enabled) return { workflow: spec.name, action: "ok" };
-  return { workflow: spec.name, action: "drift", live: existing.enabled, want: spec.enabled };
+  if (existing.enabled === spec.enabled) {
+    return { workflow: spec.name, action: "ok" };
+  }
+  return {
+    workflow: spec.name,
+    action: "drift",
+    live: existing.enabled,
+    want: spec.enabled,
+  };
 }
 
 /** All issue/PR content node-ids already on the board (paged). For dedupe. */
-export async function existingContentIds(projectId: string): Promise<Set<string>> {
+export async function existingContentIds(
+  projectId: string,
+): Promise<Set<string>> {
   type Resp = {
     node: {
       items: {
@@ -249,8 +295,12 @@ export async function existingContentIds(projectId: string): Promise<Set<string>
       }`,
       { pid: projectId, after: cursor },
     );
-    for (const n of data.node.items.nodes) if (n.content?.id) ids.add(n.content.id);
-    cursor = data.node.items.pageInfo.hasNextPage ? data.node.items.pageInfo.endCursor : null;
+    for (const n of data.node.items.nodes) {
+      if (n.content?.id) ids.add(n.content.id);
+    }
+    cursor = data.node.items.pageInfo.hasNextPage
+      ? data.node.items.pageInfo.endCursor
+      : null;
   } while (cursor);
   return ids;
 }
@@ -284,7 +334,9 @@ export async function orgRepos(): Promise<OrgRepo[]> {
       }`,
       { org: ORG, after: cursor },
     );
-    for (const r of data.organization.repositories.nodes) repos.push({ id: r.id, name: r.name });
+    for (const r of data.organization.repositories.nodes) {
+      repos.push({ id: r.id, name: r.name });
+    }
     cursor = data.organization.repositories.pageInfo.hasNextPage
       ? data.organization.repositories.pageInfo.endCursor
       : null;
@@ -296,7 +348,10 @@ export async function orgRepos(): Promise<OrgRepo[]> {
  * Link a repository to the project so it appears under the repo's Projects tab.
  * Idempotent — safe to call on every sweep; already-linked repos are a no-op.
  */
-export async function linkRepoToProject(projectId: string, repoId: string): Promise<void> {
+export async function linkRepoToProject(
+  projectId: string,
+  repoId: string,
+): Promise<void> {
   await gql(
     `mutation($pid:ID!,$rid:ID!){
       linkProjectV2ToRepository(input:{ projectId:$pid, repositoryId:$rid }){
@@ -334,11 +389,16 @@ export async function orgOpenWorkItems(): Promise<WorkItem[]> {
   return items;
 }
 
-async function openIn(repo: string, field: "issues" | "pullRequests"): Promise<WorkItem[]> {
+async function openIn(
+  repo: string,
+  field: "issues" | "pullRequests",
+): Promise<WorkItem[]> {
   const kind: WorkItem["kind"] = field === "issues" ? "Issue" : "PullRequest";
   // Only Issue has subIssues; the shared query string is reused for both
   // connections, so the field is omitted for pull requests.
-  const subIssuesSel = field === "issues" ? "subIssues(first:0){ totalCount }" : "";
+  const subIssuesSel = field === "issues"
+    ? "subIssues(first:0){ totalCount }"
+    : "";
   type Resp = {
     repository: {
       conn: {
@@ -386,7 +446,10 @@ async function openIn(repo: string, field: "issues" | "pullRequests"): Promise<W
 }
 
 /** Add one issue/PR to the board. Returns the new project-item id. */
-export async function addItem(projectId: string, contentId: string): Promise<string> {
+export async function addItem(
+  projectId: string,
+  contentId: string,
+): Promise<string> {
   type Resp = { addProjectV2ItemById: { item: { id: string } } };
   const data = await gql<Resp>(
     `mutation($pid:ID!,$cid:ID!){

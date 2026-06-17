@@ -56,7 +56,10 @@ export interface ConversionMapping {
 }
 
 /** Convert an effort estimate into concrete metered units. */
-export function toUnits(points: EffortPoints, mapping: ConversionMapping): number {
+export function toUnits(
+  points: EffortPoints,
+  mapping: ConversionMapping,
+): number {
   return points * mapping.unitPerPoint;
 }
 
@@ -159,7 +162,10 @@ export function isEligible(item: PriorityInput): boolean {
  * Composite priority score. Eligible items only — ineligible items score 0 so
  * they sink below anything actionable. Effort guards against divide-by-zero.
  */
-export function score(item: PriorityInput, weights: ScoreWeights = DEFAULT_WEIGHTS): number {
+export function score(
+  item: PriorityInput,
+  weights: ScoreWeights = DEFAULT_WEIGHTS,
+): number {
   if (!isEligible(item)) return 0;
   const effort = Math.max(item.effort, 1);
   const density = item.value / effort;
@@ -293,7 +299,10 @@ export function budgetGate(
   const { budget, consumedPoints, status } = report;
 
   if (budget.capacityPoints <= 0) {
-    return { allow: true, reason: `budget "${budget.id}" has no capacity set — failing open (warn)` };
+    return {
+      allow: true,
+      reason: `budget "${budget.id}" has no capacity set — failing open (warn)`,
+    };
   }
   const projected = consumedPoints + additionalPoints;
   if (projected >= budget.capacityPoints) {
@@ -312,5 +321,9 @@ export function budgetGate(
         `${budget.window.label} window — proceeding, triage soon`,
     };
   }
-  return { allow: true, reason: `budget "${budget.id}" healthy (${projected}/${budget.capacityPoints} pts)` };
+  return {
+    allow: true,
+    reason:
+      `budget "${budget.id}" healthy (${projected}/${budget.capacityPoints} pts)`,
+  };
 }

@@ -1,12 +1,12 @@
 {
-  "_note": "Only workflows returned by the projectV2Workflows GraphQL query. The 5 in uiOnly appear in the GitHub Projects UI but are not API-accessible.",
+  "_note": "Only workflows returned by the projectV2Workflows GraphQL query. The 5 in uiOnly appear in the GitHub Projects UI but are not API-accessible. action/setValue fields are documentation-only — the API exposes enabled state but not action config.",
   "workflows": [
     { "name": "Auto-add sub-issues to project", "enabled": true },
     { "name": "Auto-close issue",               "enabled": false },
-    { "name": "Item added to project",          "enabled": true },
-    { "name": "Item closed",                    "enabled": true },
-    { "name": "Pull request linked to issue",   "enabled": true },
-    { "name": "Pull request merged",            "enabled": true }
+    { "name": "Item added to project",          "enabled": true,  "action": "Set value", "setValue": "Status: Todo" },
+    { "name": "Item closed",                    "enabled": true,  "action": "Set value", "setValue": "Status: Done" },
+    { "name": "Pull request linked to issue",   "enabled": true,  "action": "Set value", "setValue": "Status: In Progress" },
+    { "name": "Pull request merged",            "enabled": true,  "action": "Set value", "setValue": "Status: Done" }
   ],
   "uiOnly": [
     "Auto-add to project",

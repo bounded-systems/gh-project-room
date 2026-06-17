@@ -1,20 +1,35 @@
-[
-  {
-    "name": "Burn up",
-    "type": "BURN_UP",
-    "filter": "is:issue",
-    "note": "Default chart — always present. Shows completed vs total over time."
-  },
-  {
-    "name": "Status breakdown",
-    "type": "STACKED_AREA",
-    "filter": "is:issue",
-    "note": "Custom chart (UI-only). See issue #60."
-  },
-  {
-    "name": "Cycle time",
-    "type": "COLUMN",
-    "filter": "is:issue status:Done",
-    "note": "Custom chart (UI-only). See issue #61."
-  }
-]
+{
+  "_note": "UI-only — no GraphQL mutations exist to create or configure Insights charts. Add via Front Desk → Insights → + New chart.",
+  "charts": [
+    {
+      "name": "Burn up",
+      "layout": "BURN_UP",
+      "filter": "is:issue",
+      "_note": "Built-in default — always present. Tracks total vs completed over time."
+    },
+    {
+      "name": "Status snapshot",
+      "layout": "COLUMN",
+      "xAxis": "Status",
+      "yAxis": "COUNT",
+      "_note": "Current board state at a glance — what's moving?"
+    },
+    {
+      "name": "Work by Kind",
+      "layout": "STACKED_COLUMN",
+      "xAxis": "Kind",
+      "groupBy": "Status",
+      "yAxis": "COUNT",
+      "_note": "Type distribution + health — what are we building and is it stuck?"
+    },
+    {
+      "name": "Milestone progress",
+      "layout": "STACKED_COLUMN",
+      "xAxis": "Milestone",
+      "groupBy": "Status",
+      "yAxis": "COUNT",
+      "filter": "is:issue",
+      "_note": "Per-release completion tracking — are we on track?"
+    }
+  ]
+}

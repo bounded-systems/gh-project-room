@@ -253,6 +253,16 @@ export const FRONT_DESK_VIEWS: readonly ViewSpec[] = [
 export interface WorkflowSpec {
   readonly name: string;
   readonly enabled: boolean;
+  /**
+   * The action configured on this workflow in the UI (e.g. "Set value").
+   * Documentation-only — the API exposes enabled state but not action config.
+   */
+  readonly action?: string;
+  /**
+   * The field=value the action sets (e.g. "Status: Todo").
+   * Documentation-only — mirrors the UI "Set value" action.
+   */
+  readonly setValue?: string;
 }
 
 /**
@@ -262,24 +272,22 @@ export interface WorkflowSpec {
  * `projectV2Workflows` query. The remaining 5 appear in the GitHub Projects UI
  * but are NOT returned by the API — see `FRONT_DESK_WORKFLOWS_UI_ONLY` below.
  *
- * Enabled:
- *   - Auto-add sub-issues: sub-issues of tracked epics land on the board automatically.
- *   - Item closed: sets Status → Done when an issue/PR is closed (see #52).
- *   - Item added to project: fires when any item lands; used for auto-Kind assignment (#51).
- *   - Pull request merged: fires on merge; keeps Status in sync.
- *   - Pull request linked to issue: surfaces PR↔issue relationships.
+ * Status automation pipeline (the four enabled Set-value workflows):
+ *   item added          → Status: Todo       (item lands, not yet started)
+ *   PR linked to issue  → Status: In Progress (work has begun)
+ *   item closed         → Status: Done        (closed/merged)
+ *   PR merged           → Status: Done        (merge path)
  *
- * Disabled:
- *   - Auto-close issue: not yet wired — revisit when Status automation is fuller.
- *     Currently DRIFT (live=true) — toggle off via Front Desk UI Workflows tab.
+ * Auto-add sub-issues: no action — just adds sub-issues to the board.
+ * Auto-close issue: disabled — not yet wired.
  */
 export const FRONT_DESK_WORKFLOWS: readonly WorkflowSpec[] = [
   { name: "Auto-add sub-issues to project", enabled: true },
   { name: "Auto-close issue",               enabled: false },
-  { name: "Item added to project",          enabled: true },
-  { name: "Item closed",                    enabled: true },
-  { name: "Pull request linked to issue",   enabled: true },
-  { name: "Pull request merged",            enabled: true },
+  { name: "Item added to project",          enabled: true,  action: "Set value", setValue: "Status: Todo" },
+  { name: "Item closed",                    enabled: true,  action: "Set value", setValue: "Status: Done" },
+  { name: "Pull request linked to issue",   enabled: true,  action: "Set value", setValue: "Status: In Progress" },
+  { name: "Pull request merged",            enabled: true,  action: "Set value", setValue: "Status: Done" },
 ];
 
 /**
@@ -308,16 +316,72 @@ export const FRONT_DESK_WORKFLOWS_UI_ONLY: readonly string[] = [
  *
  * Default charts (always present): Burn up.
  * Custom charts: add via Front Desk → Insights → + New chart.
+ *
+ * Field names match the GitHub Projects v2 UI exactly:
+ *   Layout: Bar | Column | Line | Stacked area | Stacked bar | Stacked column
+ *   X-axis: any field name (Status, Kind, Milestone, …)
+ *   Group by: any field name (creates stacked/grouped segments)
+ *   Y-axis: Count of items | Sum/Average/Min/Max of a field
  */
+export type InsightLayout =
+  | "BURN_UP"
+  | "BAR"
+  | "COLUMN"
+  | "LINE"
+  | "STACKED_AREA"
+  | "STACKED_BAR"
+  | "STACKED_COLUMN";
+
+export type InsightYAxis = "COUNT" | "SUM" | "AVERAGE" | "MIN" | "MAX";
+
 export interface InsightChartSpec {
   readonly name: string;
-  readonly type: "BURN_UP" | "BURN_DOWN" | "STACKED_AREA" | "COLUMN" | "LINE";
-  /** GraphQL filter string — same syntax as the UI search bar. */
+  readonly layout: InsightLayout;
+  /** X-axis field (UI label). Not used for BURN_UP (built-in). */
+  readonly xAxis?: string;
+  /** Optional grouping field — creates stacked/grouped segments. */
+  readonly groupBy?: string;
+  /** Y-axis aggregation (default: COUNT). */
+  readonly yAxis?: InsightYAxis;
+  /** Field to aggregate when yAxis is SUM/AVERAGE/MIN/MAX. */
+  readonly yAxisField?: string;
+  /** Filter query — same syntax as the UI search bar. */
   readonly filter?: string;
 }
 
+/**
+ * The desired Insights charts on Front Desk.
+ *
+ * Burn up — built-in default; tracks total vs completed over time.
+ * Status snapshot — current board state at a glance (what's moving?).
+ * Work by Kind — type distribution + health in one view (what are we building?).
+ * Milestone progress — per-release completion tracking (are we on track?).
+ */
 export const FRONT_DESK_INSIGHTS: readonly InsightChartSpec[] = [
-  { name: "Burn up",            type: "BURN_UP",       filter: "is:issue" },
-  { name: "Status breakdown",   type: "STACKED_AREA",  filter: "is:issue" },
-  { name: "Cycle time",         type: "COLUMN",        filter: "is:issue status:Done" },
+  {
+    name: "Burn up",
+    layout: "BURN_UP",
+    filter: "is:issue",
+  },
+  {
+    name: "Status snapshot",
+    layout: "COLUMN",
+    xAxis: "Status",
+    yAxis: "COUNT",
+  },
+  {
+    name: "Work by Kind",
+    layout: "STACKED_COLUMN",
+    xAxis: "Kind",
+    groupBy: "Status",
+    yAxis: "COUNT",
+  },
+  {
+    name: "Milestone progress",
+    layout: "STACKED_COLUMN",
+    xAxis: "Milestone",
+    groupBy: "Status",
+    yAxis: "COUNT",
+    filter: "is:issue",
+  },
 ];

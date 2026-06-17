@@ -1,0 +1,31 @@
+name: front-desk-sync
+# Runs the gh-project-room sweep (sync.ts):
+#   1. reconcile board fields to contract
+#   2. add all open org issues/PRs not yet on Front Desk
+#   3. write back computed Score for every on-board item
+#
+# Cross-repo: orgOpenWorkItems() enumerates ALL org repos dynamically —
+# new repos are picked up automatically with no config change.
+#
+# Token requirements (FRONT_DESK_TOKEN secret):
+#   - organization projects: read + write  (Projects v2 mutations)
+#   - issues: read (all org repos)
+#   - metadata: read (repo enumeration)
+# A GitHub App installation token is recommended over a PAT — see
+# spike-behavioral-prioritization.md §2 ("Door" concept).
+on:
+  schedule:
+    - cron: "0 * * * *" # hourly
+  workflow_dispatch: {}
+permissions: {}
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with: { deno-version: v2.x }
+      - name: Run sweep
+        env:
+          GITHUB_TOKEN: ${{ secrets.FRONT_DESK_TOKEN }}
+        run: deno run --allow-net=api.github.com --allow-env sync.ts

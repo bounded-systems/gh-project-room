@@ -327,3 +327,50 @@ export function budgetGate(
       `budget "${budget.id}" healthy (${projected}/${budget.capacityPoints} pts)`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Org standard budgets — concrete Budget instances the org operates on.
+// ---------------------------------------------------------------------------
+
+/**
+ * Claude's 5-hour rolling usage cap — the primary per-session budget.
+ * Spend older than 5 hours no longer counts against the cap (rolling window).
+ *
+ * Milestone title on Front Desk: "rolling-5h".
+ * Conversion (from spike §3.1): 1 pt = 50k tokens = 0.5 agent-hours.
+ */
+export const ROLLING_5H_BUDGET: Budget = {
+  id: "rolling-5h",
+  window: { kind: "rolling", durationHours: 5, label: "5h" },
+  capacityPoints: 10,
+  conversion: { unit: "tokens", unitPerPoint: 50_000 },
+};
+
+/**
+ * Calendar weekly budget — a 168-hour fixed window that resets weekly.
+ * Governs cumulative agent spend across all sessions in one calendar week.
+ *
+ * Milestone title on Front Desk: "weekly".
+ * Conversion: 1 pt = 50k tokens (same scale as the rolling budget).
+ */
+export const WEEKLY_BUDGET: Budget = {
+  id: "weekly",
+  window: { kind: "calendar", durationHours: 168, label: "weekly" },
+  capacityPoints: 40,
+  conversion: { unit: "tokens", unitPerPoint: 50_000 },
+};
+
+/**
+ * All org-standard budgets, keyed by id.
+ *
+ * A Front Desk milestone title IS its budget id — assigning an item to the
+ * "rolling-5h" milestone places it in the rolling-5h budget envelope.
+ * `planCapacity()` and `budgetGate()` receive a Budget; callers resolve the
+ * milestone title to one here:
+ *
+ *   const budget = ORG_BUDGETS.get(item.milestone ?? "");
+ */
+export const ORG_BUDGETS: ReadonlyMap<string, Budget> = new Map([
+  [ROLLING_5H_BUDGET.id, ROLLING_5H_BUDGET],
+  [WEEKLY_BUDGET.id, WEEKLY_BUDGET],
+]);

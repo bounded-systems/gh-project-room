@@ -144,3 +144,36 @@ export const TRACKED_CONTENT: readonly ("Issue" | "PullRequest")[] = [
   "Issue",
   "PullRequest",
 ];
+
+export type ViewLayout = "TABLE" | "BOARD" | "ROADMAP";
+
+/**
+ * A Projects v2 view the room reconciles (creates if missing, updates if
+ * layout/filter/grouping drifts). `groupByFieldName` is matched against the
+ * live field list so it works for both built-in (e.g. "Repository") and
+ * custom fields (e.g. "Kind").
+ */
+export interface ViewSpec {
+  readonly name: string;
+  readonly layout: ViewLayout;
+  /** Filter query — same syntax as the UI search bar. */
+  readonly filter?: string;
+  /** Group by this field name (looks up the field id at apply time). */
+  readonly groupByFieldName?: string;
+}
+
+/**
+ * The named views the room reconciles on Front Desk.
+ * Daily planning loop: Ready → Board → Blocked.
+ * Navigation: Epics, By Repo, By Kind.
+ * Default: Lobby (all open items).
+ */
+export const FRONT_DESK_VIEWS: readonly ViewSpec[] = [
+  { name: "Lobby",    layout: "TABLE",  filter: "-status:Done" },
+  { name: "Ready",    layout: "TABLE",  filter: "status:Todo no:depends-on" },
+  { name: "Board",    layout: "BOARD" },
+  { name: "Epics",    layout: "TABLE",  filter: "kind:epic" },
+  { name: "By Repo",  layout: "TABLE",  filter: "-status:Done", groupByFieldName: "Repository" },
+  { name: "By Kind",  layout: "TABLE",  filter: "-status:Done", groupByFieldName: "Kind" },
+  { name: "Blocked",  layout: "TABLE",  filter: "status:Blocked" },
+];

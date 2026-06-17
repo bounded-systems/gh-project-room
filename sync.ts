@@ -14,10 +14,11 @@
  *       DRY_RUN=1     preview only — reconcile read-only, add nothing
  */
 
-import { FRONT_DESK_FIELDS } from "./contract.ts";
+import { FRONT_DESK_FIELDS, FRONT_DESK_VIEWS } from "./contract.ts";
 import {
   addItem,
   applyField,
+  applyView,
   existingContentIds,
   getProject,
   linkRepoToProject,
@@ -59,7 +60,18 @@ async function main(): Promise<void> {
     }
   }
 
-  // 2. sweep all repos and add anything missing
+  // 2. reconcile views
+  for (const spec of FRONT_DESK_VIEWS) {
+    if (dryRun) {
+      const present = project.views.some((v) => v.name === spec.name);
+      log(`view "${spec.name}": ${present ? "present" : "would create"}`);
+      continue;
+    }
+    const r = await applyView(project, spec);
+    log(`view "${r.view}": ${r.action}`);
+  }
+
+  // 3. sweep all repos and add anything missing
   const onBoard = await existingContentIds(project.id);
   const work = await orgOpenWorkItems();
   const missing = work.filter((w) => !onBoard.has(w.id));

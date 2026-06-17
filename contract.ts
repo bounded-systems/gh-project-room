@@ -68,7 +68,18 @@ export interface DateFieldSpec {
   readonly builtIn: boolean;
 }
 
-export type FieldSpec = SingleSelectFieldSpec | TextFieldSpec | DateFieldSpec;
+/** A number custom field (e.g. "Effort", "Value"). */
+export interface NumberFieldSpec {
+  readonly kind: "NUMBER";
+  readonly name: string;
+  readonly builtIn: boolean;
+}
+
+export type FieldSpec =
+  | SingleSelectFieldSpec
+  | TextFieldSpec
+  | DateFieldSpec
+  | NumberFieldSpec;
 
 /**
  * `Kind` — the nature of a work item. Mirrors the beads custom schema
@@ -185,6 +196,31 @@ export const TARGET_DATE_FIELD: DateFieldSpec = {
   builtIn: false,
 };
 
+/**
+ * `Effort` — abstract effort-point estimate for `prioritization.ts`.
+ *
+ * Read by the prioritizer as `PriorityInput.effort` (EffortPoints). Treated as 1
+ * when 0 or unset inside `score()` to guard against divide-by-zero. Units are
+ * deliberately abstract — see `ConversionMapping` in prioritization.ts.
+ */
+export const EFFORT_FIELD: NumberFieldSpec = {
+  kind: "NUMBER",
+  name: "Effort",
+  builtIn: false,
+};
+
+/**
+ * `Value` — business value / urgency estimate, 0–100.
+ *
+ * Higher = more worth doing now. Read by the prioritizer as `PriorityInput.value`;
+ * drives value-density (value / effort) in the composite score.
+ */
+export const VALUE_FIELD: NumberFieldSpec = {
+  kind: "NUMBER",
+  name: "Value",
+  builtIn: false,
+};
+
 /** The full set of fields the room reconciles the live board against. */
 export const FRONT_DESK_FIELDS: readonly FieldSpec[] = [
   TYPE_FIELD,
@@ -192,6 +228,8 @@ export const FRONT_DESK_FIELDS: readonly FieldSpec[] = [
   DEPENDS_ON_FIELD,
   START_DATE_FIELD,
   TARGET_DATE_FIELD,
+  EFFORT_FIELD,
+  VALUE_FIELD,
 ];
 
 /**

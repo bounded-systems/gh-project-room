@@ -195,8 +195,8 @@ export async function applyField(
         { pid: project.id },
       );
     } else {
-      // spec.kind is "TEXT" | "DATE" here — both are valid ProjectV2CustomFieldType
-      // enum values, so the dataType interpolates directly.
+      // spec.kind is "TEXT" | "DATE" | "NUMBER" here — all are valid
+      // ProjectV2CustomFieldType enum values, so the dataType interpolates directly.
       await gql(
         `mutation($pid:ID!){
           createProjectV2Field(input:{ projectId:$pid, dataType:${spec.kind}, name:${

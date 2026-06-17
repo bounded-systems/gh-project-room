@@ -203,33 +203,24 @@ export function checkView(
 
 export type WorkflowResult =
   | { workflow: string; action: "ok" }
-  | { workflow: string; action: "enabled" }
-  | { workflow: string; action: "disabled" }
+  | { workflow: string; action: "drift"; live: boolean; want: boolean }
   | { workflow: string; action: "not-found" };
 
 /**
- * Reconcile one workflow spec against the live project.
- * Uses `updateProjectV2Workflow` to flip `enabled` if it doesn't match.
- * Falls back to "not-found" if the workflow name isn't on the project
- * (GitHub may not surface all workflows on all plan types).
+ * Check one workflow spec against the live project (read-only).
+ * GitHub Projects v2 has no `updateProjectV2Workflow` mutation in the public
+ * API — the same situation as views. Reports "ok" when in sync, "drift" when
+ * not (for manual action in the UI), and "not-found" when the workflow name
+ * doesn't appear on the project (name mismatch or plan difference).
  */
-export async function applyWorkflow(
+export function checkWorkflow(
   project: Project,
   spec: WorkflowSpec,
-): Promise<WorkflowResult> {
+): WorkflowResult {
   const existing = project.workflows.find((w) => w.name === spec.name);
   if (!existing) return { workflow: spec.name, action: "not-found" };
   if (existing.enabled === spec.enabled) return { workflow: spec.name, action: "ok" };
-
-  await gql(
-    `mutation($wid:ID!,$enabled:Boolean!){
-      updateProjectV2Workflow(input:{ workflowId:$wid, enabled:$enabled }){
-        workflow{ id enabled }
-      }
-    }`,
-    { wid: existing.id, enabled: spec.enabled },
-  );
-  return { workflow: spec.name, action: spec.enabled ? "enabled" : "disabled" };
+  return { workflow: spec.name, action: "drift", live: existing.enabled, want: spec.enabled };
 }
 
 /** All issue/PR content node-ids already on the board (paged). For dedupe. */

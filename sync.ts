@@ -18,8 +18,8 @@ import { FRONT_DESK_FIELDS, FRONT_DESK_VIEWS, FRONT_DESK_WORKFLOWS } from "./con
 import {
   addItem,
   applyField,
-  applyWorkflow,
   checkView,
+  checkWorkflow,
   existingContentIds,
   getProject,
   linkRepoToProject,
@@ -69,17 +69,15 @@ async function main(): Promise<void> {
     }
   }
 
-  // 2. reconcile built-in workflows (enable/disable via updateProjectV2Workflow)
+  // 2. report workflow status (GitHub Projects v2 API has no updateProjectV2Workflow
+  //    mutation in the public API — same as views; toggle via the UI Workflows tab)
   for (const spec of FRONT_DESK_WORKFLOWS) {
-    if (dryRun) {
-      const w = project.workflows.find((w) => w.name === spec.name);
-      if (!w) { log(`workflow "${spec.name}": not-found`); continue; }
-      const drift = w.enabled !== spec.enabled;
-      log(`workflow "${spec.name}": ${drift ? `drift (live=${w.enabled}, want=${spec.enabled})` : "ok"}`);
-      continue;
+    const r = checkWorkflow(project, spec);
+    if (r.action === "drift") {
+      log(`workflow "${r.workflow}": DRIFT (live=${r.live}, want=${r.want}) — toggle via Front Desk UI Workflows tab`);
+    } else {
+      log(`workflow "${r.workflow}": ${r.action}`);
     }
-    const r = await applyWorkflow(project, spec);
-    log(`workflow "${r.workflow}": ${r.action}`);
   }
 
   // 3. report view status (GitHub Projects v2 API has no create/update view

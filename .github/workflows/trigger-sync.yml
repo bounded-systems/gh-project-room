@@ -1,7 +1,7 @@
 name: trigger-front-desk-sync
 # Reusable entry-point: call this from any org repo to kick off a Front Desk
 # sweep when issues or PRs change in that repo. The calling workflow needs
-# access to FRONT_DESK_APP_ID and FRONT_DESK_APP_PRIVATE_KEY (org secrets,
+# access to FRONT_DESK_APP_CLIENT_ID and FRONT_DESK_APP_PRIVATE_KEY (org secrets,
 # scoped to public repos) — pass them via `secrets: inherit`.
 #
 # Example usage in another repo:

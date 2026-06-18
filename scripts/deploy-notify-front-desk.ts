@@ -140,15 +140,15 @@ for (const repo of repos) {
     continue;
   }
 
-  if (status === 409 || status === 422) {
-    // Branch protection — create PR instead.
+  if (status === 403 || status === 409 || status === 422) {
+    // Branch protection or forbidden direct push — try a PR instead.
     try {
       await createBranch(repo, defaultBranch);
       await putFile(repo, BRANCH);
       const url = await createPR(repo, defaultBranch);
       console.log(`  ✓ PR      ${repo}  ${url}`);
     } catch (err) {
-      console.log(`  ✗ failed  ${repo}  ${err}`);
+      console.log(`  ✗ failed  ${repo}  ${err} (check App is installed on this repo)`);
     }
     continue;
   }

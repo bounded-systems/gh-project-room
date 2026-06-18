@@ -4,8 +4,11 @@ name: front-desk-sync
 #   2. add all open org issues/PRs not yet on Front Desk
 #   3. write back computed Score for every on-board item
 #
-# Cross-repo: orgOpenWorkItems() enumerates ALL org repos dynamically —
-# new repos are picked up automatically with no config change.
+# Triggers:
+#   - issues/PRs opened, closed, labeled in THIS repo (immediate)
+#   - workflow_call from other org repos via trigger-sync.yml (cross-repo)
+#   - daily schedule at 06:00 UTC (catch-all: field edits, cross-repo drift)
+#   - workflow_dispatch (manual / CI)
 #
 # Token requirements (org secrets):
 #   FRONT_DESK_APP_ID          — numeric GitHub App id
@@ -15,9 +18,18 @@ name: front-desk-sync
 #   - issues: read (all org repos)
 #   - metadata: read (repo enumeration)
 on:
+  issues:
+    types: [opened, closed, reopened, labeled, unlabeled, transferred]
+  pull_request:
+    types: [opened, closed, reopened, labeled, unlabeled]
+  workflow_call: {}
   schedule:
-    - cron: "0 6 * * *" # daily at 06:00 UTC
+    - cron: "0 6 * * *" # daily catch-all
   workflow_dispatch: {}
+# Debounce: cancel any in-progress sweep when a new event arrives.
+concurrency:
+  group: front-desk-sync
+  cancel-in-progress: true
 permissions: {}
 jobs:
   sync:

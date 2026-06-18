@@ -56,7 +56,7 @@ GITHUB_TOKEN=... deno run --allow-net=api.github.com --allow-env sync.ts
 
 | Secret | Value |
 |--------|-------|
-| `FRONT_DESK_APP_ID` | Numeric GitHub App id |
+| `FRONT_DESK_APP_CLIENT_ID` | GitHub App Client ID (from App settings page) |
 | `FRONT_DESK_APP_PRIVATE_KEY` | App PEM private key |
 
 The App needs: `organization projects: read + write`, `issues: read`, `metadata: read`.

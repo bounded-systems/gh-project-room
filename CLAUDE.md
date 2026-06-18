@@ -52,11 +52,11 @@ deno lint
 GITHUB_TOKEN=... deno run --allow-net=api.github.com --allow-env sync.ts
 ```
 
-## Required secret
+## Required secrets (org-level, public repos)
 
-`FRONT_DESK_TOKEN` — org-level secret with:
-- `organization projects: read + write` (Projects v2 mutations)
-- `issues: read` (all org repos)
-- `metadata: read` (repo enumeration)
+| Secret | Value |
+|--------|-------|
+| `FRONT_DESK_APP_ID` | Numeric GitHub App id |
+| `FRONT_DESK_APP_PRIVATE_KEY` | App PEM private key |
 
-A GitHub App installation token is recommended over a PAT.
+The App needs: `organization projects: read + write`, `issues: read`, `metadata: read`.

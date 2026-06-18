@@ -7,12 +7,13 @@ name: front-desk-sync
 # Cross-repo: orgOpenWorkItems() enumerates ALL org repos dynamically —
 # new repos are picked up automatically with no config change.
 #
-# Token requirements (FRONT_DESK_TOKEN secret):
+# Token requirements (org secrets):
+#   FRONT_DESK_APP_ID          — numeric GitHub App id
+#   FRONT_DESK_APP_PRIVATE_KEY — App PEM private key
+# The App needs:
 #   - organization projects: read + write  (Projects v2 mutations)
 #   - issues: read (all org repos)
 #   - metadata: read (repo enumeration)
-# A GitHub App installation token is recommended over a PAT — see
-# spike-behavioral-prioritization.md §2 ("Door" concept).
 on:
   schedule:
     - cron: "0 * * * *" # hourly
@@ -23,9 +24,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.FRONT_DESK_APP_ID }}
+          private-key: ${{ secrets.FRONT_DESK_APP_PRIVATE_KEY }}
+          owner: bounded-systems
       - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with: { deno-version: v2.x }
       - name: Run sweep
         env:
-          GITHUB_TOKEN: ${{ secrets.FRONT_DESK_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: deno run --allow-net=api.github.com --allow-env sync.ts

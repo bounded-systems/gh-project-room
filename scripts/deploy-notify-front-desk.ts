@@ -81,11 +81,17 @@ async function getDefaultBranchSha(repo: string, branch: string): Promise<string
 
 async function createBranch(repo: string, base: string): Promise<void> {
   const sha = await getDefaultBranchSha(repo, base);
-  await gh(`/repos/${ORG}/${repo}/git/refs`, {
+  const res = await gh(`/repos/${ORG}/${repo}/git/refs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ref: `refs/heads/${BRANCH}`, sha }),
   });
+  // 422 = branch already exists — that's fine, reuse it.
+  if (res.status !== 201 && res.status !== 422) {
+    const body = await res.json();
+    throw new Error(`createBranch HTTP ${res.status}: ${JSON.stringify(body)}`);
+  }
+  await res.body?.cancel();
 }
 
 async function putFile(repo: string, branch: string, existingSha?: string | null): Promise<number> {
@@ -112,7 +118,10 @@ async function createPR(repo: string, defaultBranch: string): Promise<string> {
       body: "Wires this repo into the Front Desk prioritization board — sweeps trigger on every issue/PR event.",
     }),
   });
-  const data = await res.json() as { html_url: string };
+  const data = await res.json() as { html_url?: string; message?: string };
+  if (!data.html_url) {
+    throw new Error(`createPR HTTP ${res.status}: ${data.message ?? JSON.stringify(data)}`);
+  }
   return data.html_url;
 }
 
@@ -144,7 +153,10 @@ for (const repo of repos) {
     // Branch protection or forbidden direct push — try a PR instead.
     try {
       await createBranch(repo, defaultBranch);
-      await putFile(repo, BRANCH);
+      const fileStatus = await putFile(repo, BRANCH);
+      if (fileStatus !== 201 && fileStatus !== 200) {
+        throw new Error(`putFile on branch HTTP ${fileStatus} (token needs contents:write)`);
+      }
       const url = await createPR(repo, defaultBranch);
       console.log(`  ✓ PR      ${repo}  ${url}`);
     } catch (err) {

@@ -160,7 +160,7 @@ for (const repo of repos) {
       const url = await createPR(repo, defaultBranch);
       console.log(`  ✓ PR      ${repo}  ${url}`);
     } catch (err) {
-      console.log(`  ✗ failed  ${repo}  ${err} (check App is installed on this repo)`);
+      console.log(`  ✗ failed  ${repo}  ${err}`);
     }
     continue;
   }

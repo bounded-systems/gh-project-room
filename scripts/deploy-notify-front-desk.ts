@@ -94,7 +94,11 @@ async function createBranch(repo: string, base: string): Promise<void> {
   await res.body?.cancel();
 }
 
-async function putFile(repo: string, branch: string, existingSha?: string | null): Promise<number> {
+async function putFile(
+  repo: string,
+  branch: string,
+  existingSha?: string | null,
+): Promise<{ status: number; error?: string }> {
   const content = btoa(NOTIFY_WORKFLOW);
   const body: Record<string, string> = { message: COMMIT_MSG, content, branch };
   if (existingSha) body.sha = existingSha;
@@ -103,8 +107,12 @@ async function putFile(repo: string, branch: string, existingSha?: string | null
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  await res.body?.cancel();
-  return res.status;
+  if (res.status === 200 || res.status === 201) {
+    await res.body?.cancel();
+    return { status: res.status };
+  }
+  const data = await res.json().catch(() => ({})) as { message?: string };
+  return { status: res.status, error: data.message };
 }
 
 async function createPR(repo: string, defaultBranch: string): Promise<string> {
@@ -142,7 +150,7 @@ for (const repo of repos) {
   }
 
   const defaultBranch = await getDefaultBranch(repo);
-  const status = await putFile(repo, defaultBranch);
+  const { status } = await putFile(repo, defaultBranch);
 
   if (status === 201 || status === 200) {
     console.log(`  ✓ direct  ${repo}`);
@@ -153,9 +161,9 @@ for (const repo of repos) {
     // Branch protection or forbidden direct push — try a PR instead.
     try {
       await createBranch(repo, defaultBranch);
-      const fileStatus = await putFile(repo, BRANCH);
+      const { status: fileStatus, error: fileError } = await putFile(repo, BRANCH);
       if (fileStatus !== 201 && fileStatus !== 200) {
-        throw new Error(`putFile on branch HTTP ${fileStatus} (token needs contents:write)`);
+        throw new Error(`putFile on branch HTTP ${fileStatus}: ${fileError ?? "(no message)"}`);
       }
       const url = await createPR(repo, defaultBranch);
       console.log(`  ✓ PR      ${repo}  ${url}`);

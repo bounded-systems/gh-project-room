@@ -495,7 +495,7 @@ export async function boardItems(projectId: string): Promise<BoardItem[]> {
   const items: BoardItem[] = [];
   let cursor: string | null = null;
   do {
-    const data = await gql<Resp>(
+    const data: Resp = await gql<Resp>(
       `query($pid:ID!,$after:String){
         node(id:$pid){ ... on ProjectV2{
           items(first:100,after:$after){

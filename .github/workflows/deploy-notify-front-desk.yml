@@ -1,7 +1,6 @@
 name: deploy-notify-front-desk
 # One-shot: wire notify-front-desk.yml into every public org repo.
-# Direct-push repos get a commit straight to main.
-# Repos with branch protection get a PR from feat/notify-front-desk.
+# Idempotent: skips repos where the file is already up to date.
 on:
   workflow_dispatch: {}
 permissions: {}

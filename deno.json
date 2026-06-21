@@ -4,13 +4,14 @@
   "license": "PolyForm-Noncommercial-1.0.0",
   "exports": {
     ".": "./contract.ts",
-    "./prioritization": "./prioritization.ts"
+    "./prioritization": "./prioritization.ts",
+    "./sync": "./sync.ts"
   },
   "imports": {
     "zod": "npm:zod@3"
   },
   "tasks": {
-    "check": "deno check contract.ts prioritization.ts schema.ts",
+    "check": "deno check contract.ts prioritization.ts projects.ts schema.ts sync.ts",
     "fmt": "deno fmt",
     "lint": "deno lint"
   },
@@ -21,6 +22,6 @@
     "include": ["*.ts"]
   },
   "publish": {
-    "include": ["contract.ts", "prioritization.ts", "schema.ts", "LICENSE", "README.md"]
+    "include": ["contract.ts", "prioritization.ts", "projects.ts", "sync.ts", "schema.ts", "LICENSE", "README.md"]
   }
 }

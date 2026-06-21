@@ -35,7 +35,15 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      # Pin the checkout to THIS repo + ref. When invoked cross-repo via
+      # workflow_call (trigger-sync.yml from another org repo), the github
+      # context belongs to the CALLER, so a bare checkout would clone the
+      # caller's repo — leaving sync.ts absent and failing the run. Pinning
+      # repo+ref makes every trigger path run this repo's canonical sweep.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: bounded-systems/gh-project-room
+          ref: main
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         id: app-token
         with:

@@ -1,4 +1,5 @@
 /**
+ * @module
  * Front Desk prioritization contract — the codeable core of the behavioral
  * product (spike: spike-behavioral-prioritization.md).
  *

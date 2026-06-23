@@ -1,4 +1,5 @@
 /**
+ * @module
  * Front Desk contract — the single source of truth for the org project board.
  *
  * This supersedes the `gh api graphql` bash snippets in

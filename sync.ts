@@ -1,4 +1,5 @@
 /**
+ * @module
  * gh-project-room entrypoint — the central sweep (the "backstop" half of the
  * hybrid). This is what `.github/workflows/front-desk-sync.yml` runs.
  *

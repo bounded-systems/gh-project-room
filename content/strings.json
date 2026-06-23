@@ -1,0 +1,10 @@
+{
+  "name": {
+    "type": "name",
+    "value": "Gh Project Room"
+  },
+  "description": {
+    "type": "meta",
+    "value": "The Front Desk projection + sync room for bounded-systems — keeps org"
+  }
+}

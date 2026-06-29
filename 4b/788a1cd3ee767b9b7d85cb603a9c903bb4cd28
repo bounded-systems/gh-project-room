@@ -1,0 +1,23 @@
+.github/workflows/front-desk-sync.yml
+  s_dc3042bf98674e::t_5c52eac3807f9c 56-59
+  s_dc3042bf98674e::t_2ca30a023f9fbb 79,82
+  s_dc3042bf98674e::t_043afa8e463d4b 13-17
+.github/workflows/trigger-sync.yml
+  s_dc3042bf98674e::t_403b082216749d 3-9,20-21,25-26,29-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "4b788a1cd3ee767b9b7d85cb603a9c903bb4cd28",
+  "prompts": {},
+  "sessions": {
+    "s_dc3042bf98674e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4a4c41b5-bdca-4635-99d7-b7338a15ff09",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    }
+  }
+}

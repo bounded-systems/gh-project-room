@@ -10,17 +10,18 @@ name: front-desk-sync
 #   - daily schedule at 06:00 UTC (catch-all: field edits, cross-repo drift)
 #   - workflow_dispatch (manual / CI)
 #
-# Token (prx-26bq): the Front Desk App token is minted by the cf-token-broker via GitHub
-# Actions OIDC — the App private key lives ONLY in the broker, not in this org's secrets.
-# Set the repo/org variable FRONT_DESK_BROKER_URL to the broker base URL to switch it on.
-# Until that var is set the credentialed steps are skipped (fail-open) and the sweep no-ops;
-# the per-repo front-desk-add backstop still adds cards. The OIDC→broker exchange is
-# inlined (the infra broker-gh-token action is in a private repo; a public repo can't
-# resolve it). The broker registers `front-desk` with least-privilege permissions:
+# Token (prx-26bq): TWO mint paths, broker-preferred with a legacy-secret fallback so the
+# sweep works regardless of rollout timing:
+#   - If the repo/org var FRONT_DESK_BROKER_URL is set → mint via the cf-token-broker over
+#     GitHub Actions OIDC (App key lives only in the broker). The exchange is inlined (the
+#     infra broker-gh-token action is in a private repo; a public repo can't resolve it).
+#   - Else → fall back to the legacy org secrets FRONT_DESK_APP_CLIENT_ID /
+#     FRONT_DESK_APP_PRIVATE_KEY via create-github-app-token.
+# Once the broker is deployed and FRONT_DESK_BROKER_URL is set org-wide, delete the legacy
+# secrets and drop the fallback step. The App (either path) needs least-privilege:
 #   - organization projects: read + write  (Projects v2 mutations)
 #   - issues: read (all org repos)
 #   - metadata: read (repo enumeration)
-# Legacy org secrets FRONT_DESK_APP_CLIENT_ID / FRONT_DESK_APP_PRIVATE_KEY are no longer read.
 on:
   issues:
     types: [opened, closed, reopened, labeled, unlabeled, transferred]
@@ -49,26 +50,21 @@ jobs:
         with:
           repository: bounded-systems/gh-project-room
           ref: main
-      # Fail-open until the broker is configured: an unset FRONT_DESK_BROKER_URL means
-      # the App key isn't brokered yet, so skip the credentialed steps and let the job
-      # pass (the per-repo front-desk-add backstop still adds cards). Mirrors the proven
-      # front-desk-add posture; remove this once FRONT_DESK_BROKER_URL is set org-wide.
-      - name: broker not configured — skipping sweep
-        if: ${{ vars.FRONT_DESK_BROKER_URL == '' }}
-        run: echo "FRONT_DESK_BROKER_URL unset; broker not deployed yet — relying on front-desk-add. See prx-26bq."
       # Best-effort: the sweep is a RECONCILE (idempotent) with a daily-schedule
       # backstop, and it's fanned out from every repo's issue/PR events. So a
       # transient failure — above all the Front Desk App INSTALLATION hitting its
       # shared API rate limit during a burst of events — must NOT red-flag every
       # caller's PR. The next event/schedule sweep catches up. (continue-on-error
       # on the mint + sweep steps, so the job still succeeds.)
-      # Inlined (not the infra broker-gh-token composite action): that action lives in the
-      # PRIVATE infra repo, and a public repo's workflow can't resolve a composite action
-      # from a private repo — GitHub downloads every referenced action at job setup, before
-      # `if:` is evaluated, so even a skipped `uses:` step fails the run. Same two curls the
-      # action runs; mirrors cloudflare.yml's inline OIDC→broker pattern.
+      #
+      # Path A — broker (preferred, when FRONT_DESK_BROKER_URL is set). Inlined, not the
+      # infra broker-gh-token composite action: that action lives in the PRIVATE infra
+      # repo, and a public repo's workflow can't resolve a composite action from a private
+      # repo — GitHub downloads every referenced action at job setup, before `if:` is
+      # evaluated, so even a skipped `uses:` step fails the run. Same two curls the action
+      # runs; mirrors cloudflare.yml's inline OIDC→broker pattern.
       - name: Mint Front Desk token via the OIDC broker
-        id: app-token
+        id: broker-token
         if: ${{ vars.FRONT_DESK_BROKER_URL != '' }}
         continue-on-error: true
         env:
@@ -83,11 +79,22 @@ jobs:
           [ -n "$tok" ] || { echo "::error::broker did not return a token for app 'front-desk'"; exit 1; }
           echo "::add-mask::$tok"
           echo "token=$tok" >> "$GITHUB_OUTPUT"
+      # Path B — legacy App secret (fallback, only when the broker var is unset). Keeps the
+      # sweep alive until the broker is deployed; delete this step + the secrets afterwards.
+      - name: Mint Front Desk token via the legacy App secret
+        id: legacy-token
+        if: ${{ vars.FRONT_DESK_BROKER_URL == '' }}
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ secrets.FRONT_DESK_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FRONT_DESK_APP_PRIVATE_KEY }}
+          owner: bounded-systems
       - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with: { deno-version: v2.x }
       - name: Run sweep
-        if: ${{ steps.app-token.outputs.token != '' }}
+        if: ${{ steps.broker-token.outputs.token != '' || steps.legacy-token.outputs.token != '' }}
         continue-on-error: true
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.broker-token.outputs.token || steps.legacy-token.outputs.token }}
         run: deno run --allow-net=api.github.com --allow-env sync.ts

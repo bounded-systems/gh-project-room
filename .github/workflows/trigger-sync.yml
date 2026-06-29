@@ -1,8 +1,12 @@
 name: trigger-front-desk-sync
 # Reusable entry-point: call this from any org repo to kick off a Front Desk
-# sweep when issues or PRs change in that repo. The calling workflow needs
-# access to FRONT_DESK_APP_CLIENT_ID and FRONT_DESK_APP_PRIVATE_KEY (org secrets,
-# scoped to public repos) — pass them via `secrets: inherit`.
+# sweep when issues or PRs change in that repo.
+#
+# Auth (prx-26bq): front-desk-sync mints its token from the cf-token-broker over
+# GitHub Actions OIDC — no secrets. For that to work through this reusable chain,
+# the CALLING job must grant `permissions: id-token: write` (it propagates down to
+# front-desk-sync). If it doesn't, the sweep fails open (skips) and the daily
+# schedule + per-repo front-desk-add remain the backstop.
 #
 # Example usage in another repo:
 #
@@ -13,12 +17,15 @@ name: trigger-front-desk-sync
 #       types: [opened, closed, reopened, labeled, unlabeled]
 #   jobs:
 #     sync:
+#       permissions:
+#         id-token: write
 #       uses: bounded-systems/gh-project-room/.github/workflows/trigger-sync.yml@main
-#       secrets: inherit
 on:
   workflow_call: {}
-permissions: {}
+permissions:
+  id-token: write # propagate OIDC down to front-desk-sync (cf-token-broker mint)
 jobs:
   sync:
+    permissions:
+      id-token: write
     uses: bounded-systems/gh-project-room/.github/workflows/front-desk-sync.yml@main
-    secrets: inherit

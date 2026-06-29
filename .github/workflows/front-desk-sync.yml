@@ -14,8 +14,9 @@ name: front-desk-sync
 # Actions OIDC — the App private key lives ONLY in the broker, not in this org's secrets.
 # Set the repo/org variable FRONT_DESK_BROKER_URL to the broker base URL to switch it on.
 # Until that var is set the credentialed steps are skipped (fail-open) and the sweep no-ops;
-# the per-repo front-desk-add backstop still adds cards. The broker registers `front-desk`
-# with least-privilege permissions:
+# the per-repo front-desk-add backstop still adds cards. The OIDC→broker exchange is
+# inlined (the infra broker-gh-token action is in a private repo; a public repo can't
+# resolve it). The broker registers `front-desk` with least-privilege permissions:
 #   - organization projects: read + write  (Projects v2 mutations)
 #   - issues: read (all org repos)
 #   - metadata: read (repo enumeration)
@@ -61,14 +62,27 @@ jobs:
       # shared API rate limit during a burst of events — must NOT red-flag every
       # caller's PR. The next event/schedule sweep catches up. (continue-on-error
       # on the mint + sweep steps, so the job still succeeds.)
+      # Inlined (not the infra broker-gh-token composite action): that action lives in the
+      # PRIVATE infra repo, and a public repo's workflow can't resolve a composite action
+      # from a private repo — GitHub downloads every referenced action at job setup, before
+      # `if:` is evaluated, so even a skipped `uses:` step fails the run. Same two curls the
+      # action runs; mirrors cloudflare.yml's inline OIDC→broker pattern.
       - name: Mint Front Desk token via the OIDC broker
         id: app-token
         if: ${{ vars.FRONT_DESK_BROKER_URL != '' }}
         continue-on-error: true
-        uses: bounded-systems/infra/.github/actions/broker-gh-token@e768ec24a272b044dc3e0001010ce3e6fac5b170 # broker-gh-token (prx-26bq)
-        with:
-          app: front-desk
-          broker-url: ${{ vars.FRONT_DESK_BROKER_URL }}
+        env:
+          BROKER_URL: ${{ vars.FRONT_DESK_BROKER_URL }}
+        run: |
+          set -euo pipefail
+          jwt="$(curl -fsS -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=github-app-broker" | jq -r '.value // empty')"
+          [ -n "$jwt" ] || { echo "::error::failed to obtain an OIDC token"; exit 1; }
+          tok="$(curl -fsS -X POST -H "Authorization: Bearer ${jwt}" \
+            "${BROKER_URL%/}/github/front-desk" | jq -r '.token // empty')"
+          [ -n "$tok" ] || { echo "::error::broker did not return a token for app 'front-desk'"; exit 1; }
+          echo "::add-mask::$tok"
+          echo "token=$tok" >> "$GITHUB_OUTPUT"
       - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
         with: { deno-version: v2.x }
       - name: Run sweep

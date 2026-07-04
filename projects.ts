@@ -536,6 +536,91 @@ async function openIn(
   return out;
 }
 
+/** One merged PR, with the fields the charter's traceability invariant (#52) needs. */
+export interface MergedPRInfo {
+  readonly repo: string;
+  readonly number: number;
+  readonly title: string;
+  readonly authorLogin: string | null;
+  readonly labels: readonly string[];
+  /** `closingIssuesReferences.totalCount` — 0=off-roadmap, 1=ideal, ≥2=conflated. */
+  readonly closingIssueCount: number;
+}
+
+export interface OrgMergedPRs {
+  readonly items: MergedPRInfo[];
+  readonly skipped: SkippedRepo[];
+}
+
+/**
+ * Every MERGED pull request across public org repos (paged at both levels) —
+ * the traceability metrics' data source (health.ts). Same per-repo resilience
+ * as `orgOpenWorkItems`: an unreadable repo is skipped, not fatal.
+ */
+export async function orgMergedPullRequests(): Promise<OrgMergedPRs> {
+  const repos = await orgRepos();
+  const items: MergedPRInfo[] = [];
+  const skipped: SkippedRepo[] = [];
+  for (const repo of repos) {
+    try {
+      items.push(...await mergedIn(repo.name));
+    } catch (e) {
+      skipped.push({ repo: repo.name, reason: errMessage(e) });
+    }
+  }
+  return { items, skipped };
+}
+
+async function mergedIn(repo: string): Promise<MergedPRInfo[]> {
+  type Resp = {
+    repository: {
+      pullRequests: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: Array<{
+          number: number;
+          title: string;
+          author: { login?: string } | null;
+          labels: { nodes: Array<{ name: string }> } | null;
+          closingIssuesReferences: { totalCount: number };
+        }>;
+      };
+    };
+  };
+  const out: MergedPRInfo[] = [];
+  let cursor: string | null = null;
+  do {
+    const data: Resp = await gql<Resp>(
+      `query($org:String!,$repo:String!,$after:String){
+        repository(owner:$org, name:$repo){
+          pullRequests(first:100, after:$after, states:MERGED){
+            pageInfo{ hasNextPage endCursor }
+            nodes{
+              number title
+              author{ login }
+              labels(first:20){ nodes{ name } }
+              closingIssuesReferences{ totalCount }
+            }
+          }
+        }
+      }`,
+      { org: ORG, repo, after: cursor },
+    );
+    const conn = data.repository.pullRequests;
+    for (const n of conn.nodes) {
+      out.push({
+        repo,
+        number: n.number,
+        title: n.title,
+        authorLogin: n.author?.login ?? null,
+        labels: (n.labels?.nodes ?? []).map((l) => l.name),
+        closingIssueCount: n.closingIssuesReferences.totalCount,
+      });
+    }
+    cursor = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
+  } while (cursor);
+  return out;
+}
+
 /** Field values extracted from a single board item (for score write-back). */
 export interface BoardItemFields {
   readonly status: string | null;
@@ -554,6 +639,13 @@ export interface BoardItem {
   readonly contentId: string;
   /** Issue / PR number (repo-scoped). */
   readonly number: number;
+  /** Name of the repo the underlying issue/PR lives in. */
+  readonly repo: string;
+  /** Visibility of that repo — used by the health check's Contract metric. */
+  readonly isPrivate: boolean;
+  /** The issue/PR's actual GitHub state — used by the health check's Status
+   * freshness metric (board `Status` vs this). */
+  readonly ghState: "OPEN" | "CLOSED" | "MERGED";
   readonly fields: BoardItemFields;
 }
 
@@ -577,7 +669,12 @@ export async function boardItems(projectId: string): Promise<BoardItem[]> {
         pageInfo: { hasNextPage: boolean; endCursor: string | null };
         nodes: Array<{
           id: string;
-          content: { id?: string; number?: number } | null;
+          content: {
+            id?: string;
+            number?: number;
+            state?: string;
+            repository?: { name: string; isPrivate: boolean };
+          } | null;
           fieldValues: { nodes: FieldNode[] };
         }>;
       };
@@ -594,8 +691,8 @@ export async function boardItems(projectId: string): Promise<BoardItem[]> {
             nodes{
               id
               content{
-                ... on Issue{ id number }
-                ... on PullRequest{ id number }
+                ... on Issue{ id number state repository{ name isPrivate } }
+                ... on PullRequest{ id number state repository{ name isPrivate } }
               }
               fieldValues(first:20){ nodes{
                 ... on ProjectV2ItemFieldSingleSelectValue{
@@ -624,6 +721,9 @@ export async function boardItems(projectId: string): Promise<BoardItem[]> {
         itemId: n.id,
         contentId: n.content.id,
         number: n.content.number,
+        repo: n.content.repository?.name ?? "",
+        isPrivate: n.content.repository?.isPrivate ?? false,
+        ghState: (n.content.state as BoardItem["ghState"]) ?? "OPEN",
         fields: {
           status: fvMap.get("Status")?.name ?? null,
           kind: fvMap.get("Kind")?.name ?? null,

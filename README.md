@@ -34,6 +34,26 @@ import {
 console.log(FRONT_DESK_FIELDS.map((f) => f.name));
 ```
 
+### Dispatch a contract verb
+
+The contract's checking functions (`classifyKind`, `checkView`, `checkWorkflow`)
+are also projected as [`@bounded-systems/verbspec`](https://github.com/bounded-systems/verbspec)
+verbs in `verbs.ts` — one Zod input/output schema per action, dispatchable as a
+CLI and (via the same `VerbSpec`) as an MCP tool, an OpenAPI operation, or
+JSON-RPC, with no separate handler to keep in sync:
+
+```sh
+deno run verbs.ts classify-kind --kind Issue --labels room
+# "room"
+```
+
+This is Phase 1 of adopting VerbSpec here — a small, additive verb surface
+over the existing contract; `sync.ts` is unchanged and keeps calling the
+underlying functions directly. Modeling the *org-wide* door capability graph
+(`door-keeper.signCommit`, `door-scout.readContent`, …) the same way is a
+separate, later initiative — see `docs/org-map.md`'s reserved `door-sdk`
+SDK-family slot.
+
 ### Prioritize work items
 
 ```ts

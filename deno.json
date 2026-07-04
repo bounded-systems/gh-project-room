@@ -5,13 +5,15 @@
   "exports": {
     ".": "./contract.ts",
     "./prioritization": "./prioritization.ts",
-    "./sync": "./sync.ts"
+    "./sync": "./sync.ts",
+    "./verbs": "./verbs.ts"
   },
   "imports": {
-    "zod": "npm:zod@3"
+    "zod": "npm:zod@^4.4.3",
+    "verbspec": "jsr:@bounded-systems/verbspec@^0.3.1"
   },
   "tasks": {
-    "check": "deno check contract.ts prioritization.ts projects.ts schema.ts sync.ts",
+    "check": "deno check contract.ts prioritization.ts projects.ts schema.ts sync.ts verbs.ts",
     "fmt": "deno fmt",
     "lint": "deno lint"
   },
@@ -22,6 +24,6 @@
     "include": ["*.ts"]
   },
   "publish": {
-    "include": ["contract.ts", "prioritization.ts", "projects.ts", "sync.ts", "schema.ts", "LICENSE", "README.md"]
+    "include": ["contract.ts", "prioritization.ts", "projects.ts", "sync.ts", "schema.ts", "verbs.ts", "LICENSE", "README.md"]
   }
 }

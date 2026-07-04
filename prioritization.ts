@@ -121,6 +121,12 @@ export interface PriorityInput {
   readonly unblocks: number;
   /** The budget (milestone) this item is assigned to, if any. */
   readonly budgetId?: string;
+  /**
+   * Days since the item was opened. Optional — only read by `score()`'s
+   * no-estimate fallback (see #60), so callers that don't track age can omit
+   * it (treated as 0).
+   */
+  readonly ageDays?: number;
 }
 
 /** A scored, ranked item — the output unit of `prioritize()`. */
@@ -153,6 +159,24 @@ export const DEFAULT_WEIGHTS: ScoreWeights = {
   effortPenalty: 0.05,
 };
 
+/**
+ * Per-Kind weight for the no-estimate fallback only (see `score`). Reflects
+ * typical structural leverage — an epic represents many tasks' worth of
+ * impact — not a substitute for a real Value estimate.
+ */
+export const FALLBACK_KIND_WEIGHT: Readonly<Record<BeadKind, number>> = {
+  epic: 3,
+  room: 2,
+  door: 2,
+  task: 1,
+};
+
+/** Per-day weight for the fallback's age signal (surfaces neglected backlog). */
+export const FALLBACK_AGE_WEIGHT_PER_DAY = 0.02;
+
+/** Age stops adding fallback score past this many days (avoids unbounded growth). */
+export const FALLBACK_AGE_CAP_DAYS = 180;
+
 /** An item is actionable when its lifecycle is live and nothing blocks it. */
 export function isEligible(item: PriorityInput): boolean {
   const live = item.state === "open" || item.state === "in_progress";
@@ -162,12 +186,28 @@ export function isEligible(item: PriorityInput): boolean {
 /**
  * Composite priority score. Eligible items only — ineligible items score 0 so
  * they sink below anything actionable. Effort guards against divide-by-zero.
+ *
+ * No-estimate fallback (#60): Effort and Value are manually assigned and, in
+ * practice, are unset (0) on almost every item — the density term then
+ * collapses to 0 for all of them, so every item ties at `-effortPenalty`. When
+ * both are 0, score from signals that don't require manual input instead:
+ * Kind (structural leverage), `unblocks` (dependency leverage, same weight as
+ * the estimated path), and age (so a bare issue isn't stuck at the bottom
+ * forever). This never fires once a real Effort or Value is set.
  */
 export function score(
   item: PriorityInput,
   weights: ScoreWeights = DEFAULT_WEIGHTS,
 ): number {
   if (!isEligible(item)) return 0;
+
+  if (item.effort === 0 && item.value === 0) {
+    const ageDays = Math.min(item.ageDays ?? 0, FALLBACK_AGE_CAP_DAYS);
+    return FALLBACK_KIND_WEIGHT[item.kind] +
+      weights.flow * item.unblocks +
+      FALLBACK_AGE_WEIGHT_PER_DAY * ageDays;
+  }
+
   const effort = Math.max(item.effort, 1);
   const density = item.value / effort;
   return weights.density * density +

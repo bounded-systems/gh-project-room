@@ -6,14 +6,16 @@
     ".": "./contract.ts",
     "./prioritization": "./prioritization.ts",
     "./sync": "./sync.ts",
-    "./verbs": "./verbs.ts"
+    "./verbs": "./verbs.ts",
+    "./webhook": "./webhook.ts"
   },
   "imports": {
     "zod": "npm:zod@^4.4.3",
     "verbspec": "jsr:@bounded-systems/verbspec@^0.3.1"
   },
   "tasks": {
-    "check": "deno check contract.ts prioritization.ts projects.ts schema.ts sync.ts verbs.ts",
+    "check": "deno check contract.ts prioritization.ts projects.ts schema.ts sync.ts verbs.ts webhook.ts",
+    "webhook": "deno run --allow-net --allow-env webhook.ts",
     "fmt": "deno fmt",
     "lint": "deno lint"
   },
@@ -24,6 +26,6 @@
     "include": ["*.ts"]
   },
   "publish": {
-    "include": ["contract.ts", "prioritization.ts", "projects.ts", "sync.ts", "schema.ts", "verbs.ts", "LICENSE", "README.md"]
+    "include": ["contract.ts", "prioritization.ts", "projects.ts", "sync.ts", "schema.ts", "verbs.ts", "webhook.ts", "LICENSE", "README.md"]
   }
 }

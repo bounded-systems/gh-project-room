@@ -18,6 +18,7 @@ the top.
 | `projects.ts` | GraphQL client for GitHub Projects v2 API. |
 | `sync.ts` | Sweep entrypoint — reconcile fields → add items → write scores. |
 | `budget-check.ts` | CLI wrapper around `budgetGate()` for CI circuit-breaking. |
+| `health.ts` | Charter self-check — `healthReport()` (pure) + CLI. One row per invariant. |
 
 ## Workflows
 
@@ -50,6 +51,12 @@ deno lint
 
 # run sweep locally (requires GITHUB_TOKEN in env)
 GITHUB_TOKEN=... deno run --allow-net=api.github.com --allow-env sync.ts
+
+# run the charter health check locally
+GITHUB_TOKEN=... deno task health
+
+# unit tests (no token needed — health.ts's core is pure)
+deno task test
 ```
 
 ## Required secrets (org-level, public repos)

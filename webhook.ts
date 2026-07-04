@@ -24,7 +24,13 @@
  *   PORT                         local listen port (Deno wrapper only; def 8787)
  */
 
-import { classifyKind, ORG, PROJECT_NUMBER, TYPE_FIELD } from "./contract.ts";
+import {
+  classifyKind,
+  ORG,
+  PROJECT_NUMBER,
+  STATUS_FIELD,
+  TYPE_FIELD,
+} from "./contract.ts";
 
 export interface Env {
   readonly GITHUB_WEBHOOK_SECRET: string;
@@ -178,35 +184,51 @@ interface ProjectRef {
   readonly id: string;
   readonly kindFieldId: string | null;
   readonly kindOptions: ReadonlyMap<string, string>;
+  readonly statusFieldId: string | null;
+  readonly statusOptions: ReadonlyMap<string, string>;
 }
 
-/** Resolve Front Desk's node id and the Kind field/options (for classification). */
+/** Resolve Front Desk's node id and the Kind + Status fields/options. */
 async function getProject(token: string): Promise<ProjectRef> {
+  type FieldResp =
+    | { id: string; options: Array<{ id: string; name: string }> }
+    | null;
   type Resp = {
     organization: {
       projectV2: {
         id: string;
-        field:
-          | { id: string; options: Array<{ id: string; name: string }> }
-          | null;
+        kindField: FieldResp;
+        statusField: FieldResp;
       };
     };
   };
   const data = await gql<Resp>(
     token,
-    `query($org:String!,$num:Int!,$kind:String!){
+    `query($org:String!,$num:Int!,$kind:String!,$status:String!){
       organization(login:$org){ projectV2(number:$num){
         id
-        field(name:$kind){ ... on ProjectV2SingleSelectField { id options{ id name } } }
+        kindField: field(name:$kind){ ... on ProjectV2SingleSelectField { id options{ id name } } }
+        statusField: field(name:$status){ ... on ProjectV2SingleSelectField { id options{ id name } } }
       } }
     }`,
-    { org: ORG, num: PROJECT_NUMBER, kind: TYPE_FIELD.name },
+    {
+      org: ORG,
+      num: PROJECT_NUMBER,
+      kind: TYPE_FIELD.name,
+      status: STATUS_FIELD.name,
+    },
   );
   const p = data.organization.projectV2;
   return {
     id: p.id,
-    kindFieldId: p.field?.id ?? null,
-    kindOptions: new Map((p.field?.options ?? []).map((o) => [o.name, o.id])),
+    kindFieldId: p.kindField?.id ?? null,
+    kindOptions: new Map(
+      (p.kindField?.options ?? []).map((o) => [o.name, o.id]),
+    ),
+    statusFieldId: p.statusField?.id ?? null,
+    statusOptions: new Map(
+      (p.statusField?.options ?? []).map((o) => [o.name, o.id]),
+    ),
   };
 }
 
@@ -226,7 +248,8 @@ async function addToBoard(
   return data.addProjectV2ItemById.item.id;
 }
 
-async function setKind(
+/** Set a single-select field value on a project item (Kind or Status). */
+async function setSingleSelectValue(
   token: string,
   projectId: string,
   itemId: string,
@@ -257,28 +280,42 @@ interface WebhookPayload {
   pull_request?: { node_id?: string; number?: number };
 }
 
-/** What lands an item: issue opened/reopened, or PR opened. Returns null otherwise. */
-function tracked(
+export type TrackedAction = "opened" | "reopened" | "closed";
+
+export interface ClassifiedEvent {
+  readonly contentId: string;
+  readonly kind: "Issue" | "PullRequest";
+  readonly labels: string[];
+  readonly action: TrackedAction;
+}
+
+/**
+ * What the webhook acts on: issue/PR opened, reopened, or closed. Returns null
+ * for anything else (draft/edited/labeled/etc. are ignored — the sweep is the
+ * backstop for those).
+ */
+export function classify(
   event: string | null,
   p: WebhookPayload,
-):
-  | { contentId: string; kind: "Issue" | "PullRequest"; labels: string[] }
-  | null {
-  if (
-    event === "issues" && (p.action === "opened" || p.action === "reopened")
-  ) {
+): ClassifiedEvent | null {
+  const action = p.action;
+  if (action !== "opened" && action !== "reopened" && action !== "closed") {
+    return null;
+  }
+  if (event === "issues") {
     const id = p.issue?.node_id;
     if (!id) return null;
     return {
       contentId: id,
       kind: "Issue",
       labels: (p.issue?.labels ?? []).map((l) => l.name),
+      action,
     };
   }
-  if (event === "pull_request" && p.action === "opened") {
+  if (event === "pull_request") {
     const id = p.pull_request?.node_id;
     if (!id) return null;
-    return { contentId: id, kind: "PullRequest", labels: [] };
+    return { contentId: id, kind: "PullRequest", labels: [], action };
   }
   return null;
 }
@@ -327,8 +364,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return new Response("skipped (not public)");
   }
 
-  const t = tracked(event, payload);
-  if (!t) return new Response("ignored");
+  const c = classify(event, payload);
+  if (!c) return new Response("ignored");
 
   // installationId is interpolated into the token-mint URL — require a positive
   // integer so a malformed payload can't reshape that request (defense in depth;
@@ -344,16 +381,52 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   try {
     const token = await installationToken(env, installationId);
     const project = await getProject(token);
-    const itemId = await addToBoard(token, project.id, t.contentId);
-    const kind = classifyKind({ ...t, hasSubIssues: false });
-    const optionId = project.kindFieldId
-      ? project.kindOptions.get(kind)
-      : undefined;
-    if (project.kindFieldId && optionId) {
-      await setKind(token, project.id, itemId, project.kindFieldId, optionId);
+    // Idempotent: returns the existing item id if already on the board, so
+    // close/reopen never creates a duplicate.
+    const itemId = await addToBoard(token, project.id, c.contentId);
+
+    let kindNote = "";
+    if (c.action !== "closed") {
+      const kind = classifyKind({ ...c, hasSubIssues: false });
+      const optionId = project.kindFieldId
+        ? project.kindOptions.get(kind)
+        : undefined;
+      if (project.kindFieldId && optionId) {
+        await setSingleSelectValue(
+          token,
+          project.id,
+          itemId,
+          project.kindFieldId,
+          optionId,
+        );
+        kindNote = ` [Kind→${kind}]`;
+      }
     }
-    console.log(`[webhook] ${repo}: added ${t.kind} [Kind→${kind}]`);
-    return new Response("added");
+
+    // Status: "opened" relies on the board's native "Item added to project"
+    // workflow (already sets Todo). closed/reopened have no such reliable
+    // native equivalent (see docs/front-desk-charter.md's known gap), so this
+    // is the code-owned, deterministic path for those two (#53).
+    const statusName = c.action === "closed"
+      ? "Done"
+      : c.action === "reopened"
+      ? "Todo"
+      : null;
+    if (statusName && project.statusFieldId) {
+      const optionId = project.statusOptions.get(statusName);
+      if (optionId) {
+        await setSingleSelectValue(
+          token,
+          project.id,
+          itemId,
+          project.statusFieldId,
+          optionId,
+        );
+      }
+    }
+
+    console.log(`[webhook] ${repo}: ${c.action} ${c.kind}${kindNote}`);
+    return new Response(c.action);
   } catch (e) {
     // Log and 200 so GitHub doesn't hammer retries; the daily sweep backstops.
     console.error(`[webhook] ${repo}: ${e instanceof Error ? e.message : e}`);

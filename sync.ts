@@ -222,6 +222,8 @@ async function main(): Promise<void> {
         value: item.fields.value ?? 0,
         openBlockers,
         unblocks: unblocksCounts.get(item.number) ?? 0,
+        ageDays: (Date.now() - new Date(item.createdAt).getTime()) /
+          (1000 * 60 * 60 * 24),
       };
       const newScore = Math.round(score(input) * 100) / 100;
       const cur = item.fields.score;

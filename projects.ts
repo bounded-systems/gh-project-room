@@ -646,6 +646,8 @@ export interface BoardItem {
   /** The issue/PR's actual GitHub state — used by the health check's Status
    * freshness metric (board `Status` vs this). */
   readonly ghState: "OPEN" | "CLOSED" | "MERGED";
+  /** ISO 8601 creation timestamp — feeds the age-based prioritization fallback (#60). */
+  readonly createdAt: string;
   readonly fields: BoardItemFields;
 }
 
@@ -673,6 +675,7 @@ export async function boardItems(projectId: string): Promise<BoardItem[]> {
             id?: string;
             number?: number;
             state?: string;
+            createdAt?: string;
             repository?: { name: string; isPrivate: boolean };
           } | null;
           fieldValues: { nodes: FieldNode[] };
@@ -691,8 +694,8 @@ export async function boardItems(projectId: string): Promise<BoardItem[]> {
             nodes{
               id
               content{
-                ... on Issue{ id number state repository{ name isPrivate } }
-                ... on PullRequest{ id number state repository{ name isPrivate } }
+                ... on Issue{ id number state createdAt repository{ name isPrivate } }
+                ... on PullRequest{ id number state createdAt repository{ name isPrivate } }
               }
               fieldValues(first:20){ nodes{
                 ... on ProjectV2ItemFieldSingleSelectValue{
@@ -724,6 +727,7 @@ export async function boardItems(projectId: string): Promise<BoardItem[]> {
         repo: n.content.repository?.name ?? "",
         isPrivate: n.content.repository?.isPrivate ?? false,
         ghState: (n.content.state as BoardItem["ghState"]) ?? "OPEN",
+        createdAt: n.content.createdAt ?? new Date(0).toISOString(),
         fields: {
           status: fvMap.get("Status")?.name ?? null,
           kind: fvMap.get("Kind")?.name ?? null,

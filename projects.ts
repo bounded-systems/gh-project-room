@@ -408,29 +408,70 @@ export interface WorkItem {
   readonly hasSubIssues: boolean;
 }
 
+/** One repo the sweep could not fully read, with the error that stopped it. */
+export interface SkippedRepo {
+  readonly repo: string;
+  readonly reason: string;
+}
+
+/**
+ * The result of enumerating org work items: the items that were readable, plus
+ * any repos that could not be read. Partial by design — a single unreadable
+ * repo must never abort the whole reconcile (that broke the central sweep:
+ * one "Resource not accessible by integration" aborted every add).
+ */
+export interface OrgWorkItems {
+  readonly items: WorkItem[];
+  readonly skipped: SkippedRepo[];
+}
+
+function errMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 /**
  * Every OPEN issue and PR across ALL repos in the org (paged at both levels).
  * Enumerating dynamically means new repos are covered with no config change —
  * the room is "tied to all repos" by construction.
+ *
+ * Resilient: each repo is read independently. If its issues query fails, it is
+ * retried WITHOUT the gated `subIssues` field before giving up; a repo that
+ * still fails is recorded in `skipped` and the sweep continues. So the board
+ * gets every readable repo's items even when one repo is inaccessible.
  */
-export async function orgOpenWorkItems(): Promise<WorkItem[]> {
+export async function orgOpenWorkItems(): Promise<OrgWorkItems> {
   const repos = await orgRepos();
   const items: WorkItem[] = [];
+  const skipped: SkippedRepo[] = [];
   for (const repo of repos) {
-    items.push(...await openIn(repo.name, "issues"));
-    items.push(...await openIn(repo.name, "pullRequests"));
+    try {
+      try {
+        items.push(...await openIn(repo.name, "issues"));
+      } catch {
+        // Most likely the gated `subIssues` field — retry without it so the
+        // items still land (only the epic auto-classify signal is lost).
+        items.push(...await openIn(repo.name, "issues", false));
+      }
+      items.push(...await openIn(repo.name, "pullRequests"));
+    } catch (e) {
+      skipped.push({ repo: repo.name, reason: errMessage(e) });
+    }
   }
-  return items;
+  return { items, skipped };
 }
 
 async function openIn(
   repo: string,
   field: "issues" | "pullRequests",
+  withSubIssues = true,
 ): Promise<WorkItem[]> {
   const kind: WorkItem["kind"] = field === "issues" ? "Issue" : "PullRequest";
   // Only Issue has subIssues; the shared query string is reused for both
-  // connections, so the field is omitted for pull requests.
-  const subIssuesSel = field === "issues"
+  // connections, so the field is omitted for pull requests. `subIssues` is a
+  // newer, gated GitHub field that can throw "Resource not accessible by
+  // integration" under some App tokens — orgOpenWorkItems retries without it
+  // (withSubIssues=false) so one gated field never aborts the whole sweep.
+  const subIssuesSel = field === "issues" && withSubIssues
     ? "subIssues(first:0){ totalCount }"
     : "";
   type Resp = {

@@ -306,19 +306,29 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   const payload = JSON.parse(body) as WebhookPayload;
   const repo = payload.repository?.full_name ?? "?";
 
-  // Public/private contract: the public receiver never surfaces a private repo.
-  if (payload.repository?.private) {
+  // Public/private contract, FAIL CLOSED: only an explicitly public repo may
+  // reach the public board. A missing/true `private` (or absent repository) is
+  // skipped, so a private repo can never leak here on a malformed payload.
+  if (payload.repository?.private !== false) {
     console.log(
-      `[webhook] ${repo}: private repo — skipped (belongs to the private board)`,
+      `[webhook] ${repo}: not confirmed public — skipped (visibility fail-closed)`,
     );
-    return new Response("skipped (private)");
+    return new Response("skipped (not public)");
   }
 
   const t = tracked(event, payload);
   if (!t) return new Response("ignored");
 
+  // installationId is interpolated into the token-mint URL — require a positive
+  // integer so a malformed payload can't reshape that request (defense in depth;
+  // the body is already signature-verified above).
   const installationId = payload.installation?.id;
-  if (!installationId) return new Response("no installation", { status: 400 });
+  if (
+    typeof installationId !== "number" || !Number.isInteger(installationId) ||
+    installationId <= 0
+  ) {
+    return new Response("bad installation id", { status: 400 });
+  }
 
   try {
     const token = await installationToken(env, installationId);

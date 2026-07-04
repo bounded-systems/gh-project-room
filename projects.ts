@@ -342,15 +342,29 @@ export async function existingContentIds(
 export interface OrgRepo {
   readonly id: string;
   readonly name: string;
+  readonly isPrivate: boolean;
 }
 
-/** All repos in the org (paged). Used for both linking and work-item enumeration. */
-export async function orgRepos(): Promise<OrgRepo[]> {
+/**
+ * Org repos (paged). Used for both linking and work-item enumeration.
+ *
+ * Public/private contract, FAIL CLOSED: by default this returns only repos that
+ * are **explicitly public** (`isPrivate === false`). A private repo — or one
+ * whose visibility can't be confirmed public — is skipped, so the sweep can
+ * never add a private repo's issues/PRs to the public Front Desk board. This is
+ * parity with the webhook receiver (`webhook.ts`, `repository.private !== false`)
+ * so the two intake paths agree; without it the sweep silently re-adds what the
+ * webhook skips.
+ *
+ * `includePrivate` is the opt-in seam for the future private board — pass `true`
+ * to enumerate private repos for a private-board sweep.
+ */
+export async function orgRepos(includePrivate = false): Promise<OrgRepo[]> {
   type RepoConn = {
     organization: {
       repositories: {
         pageInfo: { hasNextPage: boolean; endCursor: string | null };
-        nodes: Array<{ id: string; name: string }>;
+        nodes: Array<{ id: string; name: string; isPrivate: boolean }>;
       };
     };
   };
@@ -362,14 +376,16 @@ export async function orgRepos(): Promise<OrgRepo[]> {
         organization(login:$org){
           repositories(first:100, after:$after, orderBy:{field:NAME,direction:ASC}){
             pageInfo{ hasNextPage endCursor }
-            nodes{ id name }
+            nodes{ id name isPrivate }
           }
         }
       }`,
       { org: ORG, after: cursor },
     );
     for (const r of data.organization.repositories.nodes) {
-      repos.push({ id: r.id, name: r.name });
+      // Fail closed: only an explicitly-public repo reaches the public board.
+      if (!includePrivate && r.isPrivate !== false) continue;
+      repos.push({ id: r.id, name: r.name, isPrivate: r.isPrivate });
     }
     cursor = data.organization.repositories.pageInfo.hasNextPage
       ? data.organization.repositories.pageInfo.endCursor

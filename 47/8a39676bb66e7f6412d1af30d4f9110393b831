@@ -1,0 +1,19 @@
+docs/front-desk-charter.md
+  s_84486fa1838ab6::t_4c7e37ec611a16 1-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "478a39676bb66e7f6412d1af30d4f9110393b831",
+  "prompts": {},
+  "sessions": {
+    "s_84486fa1838ab6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1c882c90-bea0-4552-a2b3-b55d4a9a195d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    }
+  }
+}

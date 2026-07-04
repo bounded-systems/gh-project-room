@@ -291,7 +291,18 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return new Response("not found", { status: 404 });
   }
 
+  // Reject oversized bodies BEFORE reading/HMACing them — a real GitHub webhook
+  // payload is far under 1 MiB, so this caps the work an unauthenticated caller
+  // can force (defense in depth; the signature is still the gate below).
+  const MAX_BODY = 1_048_576;
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY) {
+    return new Response("payload too large", { status: 413 });
+  }
+
   const body = await req.text();
+  if (body.length > MAX_BODY) {
+    return new Response("payload too large", { status: 413 });
+  }
   if (
     !await verifySignature(
       env.GITHUB_WEBHOOK_SECRET,

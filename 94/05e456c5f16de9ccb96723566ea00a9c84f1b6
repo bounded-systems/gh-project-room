@@ -1,0 +1,19 @@
+projects.ts
+  s_84486fa1838ab6::t_3b0b370b68cb28 345,348-362,367,379,386-388
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "9405e456c5f16de9ccb96723566ea00a9c84f1b6",
+  "prompts": {},
+  "sessions": {
+    "s_84486fa1838ab6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1c882c90-bea0-4552-a2b3-b55d4a9a195d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Robert DeLanghe <1240090+bdelanghe@users.noreply.github.com>"
+    }
+  }
+}

@@ -130,7 +130,14 @@ async function main(): Promise<void> {
 
   // 4. sweep all repos and add anything missing
   const onBoard = await existingContentIds(project.id);
-  const work = await orgOpenWorkItems();
+  const { items: work, skipped } = await orgOpenWorkItems();
+  if (skipped.length) {
+    log(
+      `could not read ${skipped.length} repo(s) — skipped (not aborting): ${
+        skipped.map((s) => `${s.repo} (${s.reason})`).join("; ")
+      }`,
+    );
+  }
   const missing = work.filter((w) => !onBoard.has(w.id));
   log(
     `open items: ${work.length}, already on board: ${

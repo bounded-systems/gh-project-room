@@ -226,6 +226,21 @@ export async function applyField(
   return { field: spec.name, action: "exists" };
 }
 
+export type ViewCheckResult = { view: string; action: "exists" | "missing" };
+
+/**
+ * Pure predicate: does a view spec's name appear among existing view names?
+ * Decoupled from the GraphQL `Project` shape so it can be driven by any list
+ * of names — e.g. a VerbSpec verb's plain-JSON input (see verbs.ts).
+ */
+export function viewExists(
+  existingViewNames: readonly string[],
+  spec: import("./contract.ts").ViewSpec,
+): ViewCheckResult {
+  const exists = existingViewNames.includes(spec.name);
+  return { view: spec.name, action: exists ? "exists" : "missing" };
+}
+
 /**
  * Check whether a view exists on the project. Returns "exists" or "missing".
  * GitHub Projects v2 does not expose createProjectV2View / updateProjectV2View
@@ -235,15 +250,41 @@ export async function applyField(
 export function checkView(
   project: Project,
   spec: import("./contract.ts").ViewSpec,
-): { view: string; action: "exists" | "missing" } {
-  const exists = project.views.some((v) => v.name === spec.name);
-  return { view: spec.name, action: exists ? "exists" : "missing" };
+): ViewCheckResult {
+  return viewExists(project.views.map((v) => v.name), spec);
 }
 
 export type WorkflowResult =
   | { workflow: string; action: "ok" }
   | { workflow: string; action: "drift"; live: boolean; want: boolean }
   | { workflow: string; action: "not-found" };
+
+export interface ExistingWorkflowState {
+  readonly name: string;
+  readonly enabled: boolean;
+}
+
+/**
+ * Pure predicate: does a workflow spec's enabled state match the live board?
+ * Decoupled from the GraphQL `Project` shape — e.g. a VerbSpec verb's
+ * plain-JSON input (see verbs.ts).
+ */
+export function workflowStatus(
+  existingWorkflows: readonly ExistingWorkflowState[],
+  spec: WorkflowSpec,
+): WorkflowResult {
+  const existing = existingWorkflows.find((w) => w.name === spec.name);
+  if (!existing) return { workflow: spec.name, action: "not-found" };
+  if (existing.enabled === spec.enabled) {
+    return { workflow: spec.name, action: "ok" };
+  }
+  return {
+    workflow: spec.name,
+    action: "drift",
+    live: existing.enabled,
+    want: spec.enabled,
+  };
+}
 
 /**
  * Check one workflow spec against the live project (read-only).
@@ -256,17 +297,10 @@ export function checkWorkflow(
   project: Project,
   spec: WorkflowSpec,
 ): WorkflowResult {
-  const existing = project.workflows.find((w) => w.name === spec.name);
-  if (!existing) return { workflow: spec.name, action: "not-found" };
-  if (existing.enabled === spec.enabled) {
-    return { workflow: spec.name, action: "ok" };
-  }
-  return {
-    workflow: spec.name,
-    action: "drift",
-    live: existing.enabled,
-    want: spec.enabled,
-  };
+  return workflowStatus(
+    project.workflows.map((w) => ({ name: w.name, enabled: w.enabled })),
+    spec,
+  );
 }
 
 /** All issue/PR content node-ids already on the board (paged). For dedupe. */

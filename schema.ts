@@ -21,6 +21,12 @@ import type {
   BeadEdgeType,
   BeadKind,
   BeadState,
+  FieldSpec,
+  SingleSelectColor,
+  SingleSelectOption,
+  ViewLayout,
+  ViewSpec,
+  WorkflowSpec,
 } from "./contract.ts";
 
 export const BeadKindSchema: z.ZodType<BeadKind> = z.enum([
@@ -71,3 +77,87 @@ export const BeadWorkItemSchema = z.object({
 
 export type BeadWorkItemInput = z.input<typeof BeadWorkItemSchema>;
 export type BeadWorkItemOutput = z.output<typeof BeadWorkItemSchema>;
+
+// ---------------------------------------------------------------------------
+// Board-schema (Front Desk fields/views/workflows) — the Zod half of the
+// contract.ts types above the beads projection. Lets verbs.ts (and any future
+// VerbSpec consumer) validate a FieldSpec/ViewSpec/WorkflowSpec at runtime
+// instead of trusting the TypeScript types alone.
+// ---------------------------------------------------------------------------
+
+export const SingleSelectColorSchema: z.ZodType<SingleSelectColor> = z.enum([
+  "RED",
+  "ORANGE",
+  "YELLOW",
+  "GREEN",
+  "BLUE",
+  "PURPLE",
+  "PINK",
+  "GRAY",
+]);
+
+export const SingleSelectOptionSchema: z.ZodType<SingleSelectOption> = z
+  .object({
+    name: z.string(),
+    color: SingleSelectColorSchema,
+    description: z.string(),
+  });
+
+/** Mirrors contract.ts's `FieldSpec` union (SingleSelect/Text/Date/Number). */
+export const FieldSpecSchema: z.ZodType<FieldSpec> = z.discriminatedUnion(
+  "kind",
+  [
+    z.object({
+      kind: z.literal("SINGLE_SELECT"),
+      name: z.string(),
+      builtIn: z.boolean(),
+      options: z.array(SingleSelectOptionSchema),
+    }),
+    z.object({
+      kind: z.literal("TEXT"),
+      name: z.string(),
+      builtIn: z.boolean(),
+    }),
+    z.object({
+      kind: z.literal("DATE"),
+      name: z.string(),
+      builtIn: z.boolean(),
+    }),
+    z.object({
+      kind: z.literal("NUMBER"),
+      name: z.string(),
+      builtIn: z.boolean(),
+    }),
+  ],
+);
+
+export const ViewLayoutSchema: z.ZodType<ViewLayout> = z.enum([
+  "TABLE",
+  "BOARD",
+  "ROADMAP",
+]);
+
+/** Mirrors contract.ts's `ViewSpec` — a Front Desk view (Table/Board/Roadmap). */
+export const ViewSpecSchema: z.ZodType<ViewSpec> = z.object({
+  name: z.string(),
+  layout: ViewLayoutSchema,
+  filter: z.string().optional(),
+  groupBy: z.string().optional(),
+  sortBy: z.string().optional(),
+  sliceBy: z.string().optional(),
+  showHierarchy: z.boolean().optional(),
+  columnBy: z.string().optional(),
+  swimlanes: z.string().optional(),
+  fieldSum: z.string().optional(),
+  dates: z.string().optional(),
+  zoomLevel: z.string().optional(),
+  markers: z.string().optional(),
+});
+
+/** Mirrors contract.ts's `WorkflowSpec` — a built-in Projects v2 workflow. */
+export const WorkflowSpecSchema: z.ZodType<WorkflowSpec> = z.object({
+  name: z.string(),
+  enabled: z.boolean(),
+  action: z.string().optional(),
+  setValue: z.string().optional(),
+});

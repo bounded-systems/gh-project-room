@@ -1,0 +1,33 @@
+name: front-desk-traceability
+# Reusable CI check for the charter's traceability invariant, hard side (#54):
+# a PR must not close more than one issue (>=2 means conflated intents; split
+# the PR). The 0-closing-issue case is a separate, non-blocking REPORT (#55) —
+# this check only fails at >=2, and that rule has no exemptions.
+#
+# Callers: a thin per-repo wrapper workflow triggered `on: pull_request`,
+# calling this via `uses:` (see this repo's own front-desk-traceability-check.yml
+# for the in-repo example; other repos pin
+# `bounded-systems/gh-project-room/.github/workflows/front-desk-traceability.yml@main`).
+on:
+  workflow_call: {}
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: bounded-systems/gh-project-room
+          ref: main
+      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+        with: { deno-version: v2.x }
+      - name: Check closingIssuesReferences count
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          deno run --allow-net=api.github.com --allow-env traceability-check.ts \
+            --repo "${{ github.repository }}" \
+            --pr "${{ github.event.pull_request.number }}"

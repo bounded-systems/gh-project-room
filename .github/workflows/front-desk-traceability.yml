@@ -5,9 +5,9 @@ name: front-desk-traceability
 # this check only fails at >=2, and that rule has no exemptions.
 #
 # Callers: a thin per-repo wrapper workflow triggered `on: pull_request`,
-# calling this via `uses:` (see this repo's own front-desk-traceability-check.yml
-# for the in-repo example; other repos pin
-# `bounded-systems/gh-project-room/.github/workflows/front-desk-traceability.yml@main`).
+# calling this via `uses:` — a same-repo relative `./...` reference (once this
+# file exists on main) or, for other repos, pinned as
+# `bounded-systems/gh-project-room/.github/workflows/front-desk-traceability.yml@main`.
 on:
   workflow_call: {}
 permissions:
@@ -27,7 +27,9 @@ jobs:
       - name: Check closingIssuesReferences count
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           deno run --allow-net=api.github.com --allow-env traceability-check.ts \
-            --repo "${{ github.repository }}" \
-            --pr "${{ github.event.pull_request.number }}"
+            --repo "$PR_REPO" \
+            --pr "$PR_NUMBER"

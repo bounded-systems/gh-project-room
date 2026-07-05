@@ -24,7 +24,7 @@ the top.
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| `front-desk-sync.yml` | hourly + `workflow_dispatch` | Full board sweep |
+| `front-desk-sync.yml` | weekly + repo events + `workflow_dispatch` | Full board sweep |
 | `front-desk-budget.yml` | `workflow_call` | Budget gate (reusable) |
 | `jsr-check.yml` | PRs | `deno fmt`, `deno lint`, `deno check`, JSR dry-run |
 | `publish-jsr.yml` | version tags | Publishes to JSR |

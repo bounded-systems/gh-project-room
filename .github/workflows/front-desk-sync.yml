@@ -7,7 +7,9 @@ name: front-desk-sync
 # Triggers:
 #   - issues/PRs opened, closed, labeled in THIS repo (immediate)
 #   - workflow_call from other org repos via trigger-sync.yml (cross-repo)
-#   - daily schedule at 06:00 UTC (catch-all: field edits, cross-repo drift)
+#   - weekly schedule at 06:00 UTC Monday (catch-all: field-schema drift, Score
+#     recompute — reduced from daily now that the webhook keeps Status live on
+#     close/reopen, see #53/#56; Coverage and Kind were always webhook-instant)
 #   - workflow_dispatch (manual / CI)
 #
 # Token (prx-26bq): minted via the cf-token-broker over GitHub Actions OIDC — the App key
@@ -25,7 +27,7 @@ on:
     types: [opened, closed, reopened, labeled, unlabeled]
   workflow_call: {}
   schedule:
-    - cron: "0 6 * * *" # daily catch-all
+    - cron: "0 6 * * 1" # weekly catch-all (Monday 06:00 UTC)
   workflow_dispatch: {}
 # Debounce: cancel any in-progress sweep when a new event arrives.
 concurrency:
@@ -46,7 +48,7 @@ jobs:
         with:
           repository: bounded-systems/gh-project-room
           ref: main
-      # Best-effort: the sweep is a RECONCILE (idempotent) with a daily-schedule
+      # Best-effort: the sweep is a RECONCILE (idempotent) with a weekly-schedule
       # backstop, and it's fanned out from every repo's issue/PR events. So a
       # transient failure — above all the Front Desk App INSTALLATION hitting its
       # shared API rate limit during a burst of events — must NOT red-flag every

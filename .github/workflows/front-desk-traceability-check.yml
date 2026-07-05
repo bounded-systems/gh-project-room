@@ -1,0 +1,20 @@
+name: front-desk-traceability-check
+# Thin per-repo wrapper calling the reusable front-desk-traceability.yml on
+# this repo's own PRs (dogfooding the charter, #52/#54).
+#
+# A caller job can only grant a callee AT MOST the permissions its own token
+# has; without this explicit block the caller defaults to none for
+# issues/pull-requests here, and GitHub hard-fails the run before scheduling
+# any job (startup_failure: "requesting 'issues: read, pull-requests: read',
+# but is only allowed 'issues: none, pull-requests: none'" — confirmed live).
+# Must be >= what front-desk-traceability.yml itself requests.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+jobs:
+  check:
+    uses: ./.github/workflows/front-desk-traceability.yml

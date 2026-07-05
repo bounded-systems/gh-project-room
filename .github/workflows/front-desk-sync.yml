@@ -3,6 +3,8 @@ name: front-desk-sync
 #   1. reconcile board fields to contract
 #   2. add all open org issues/PRs not yet on Front Desk
 #   3. write back computed Score for every on-board item
+#   4. file/update/close the health tracking issue when a gate invariant is
+#      red (health-issue.ts, #64) — the top of the dogfood ladder
 #
 # Triggers:
 #   - issues/PRs opened, closed, labeled in THIS repo (immediate)
@@ -83,3 +85,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.broker-token.outputs.token }}
         run: deno run --allow-net=api.github.com --allow-env sync.ts
+      # File/update/close the health tracking issue (#64) — the top of the
+      # dogfood ladder. Reuses this job's already-minted token (no second
+      # OIDC round trip); best-effort like the sweep itself.
+      - name: Update health tracking issue
+        if: ${{ steps.broker-token.outputs.token != '' }}
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ steps.broker-token.outputs.token }}
+        run: deno run --allow-net=api.github.com --allow-env health-issue.ts

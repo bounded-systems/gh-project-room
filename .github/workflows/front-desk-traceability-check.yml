@@ -1,9 +1,0 @@
-name: front-desk-traceability-check
-# Thin per-repo wrapper calling the reusable front-desk-traceability.yml on
-# this repo's own PRs (dogfooding the charter, #52/#54).
-on:
-  pull_request:
-    types: [opened, reopened, synchronize, edited]
-jobs:
-  check:
-    uses: ./.github/workflows/front-desk-traceability.yml

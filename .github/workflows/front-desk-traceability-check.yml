@@ -1,0 +1,12 @@
+name: front-desk-traceability-check
+# Thin per-repo wrapper calling the reusable front-desk-traceability.yml on
+# this repo's own PRs (dogfooding the charter, #52/#54). Deferred out of #54's
+# own PR because a pull_request-triggered wrapper can't resolve a relative
+# `uses: ./...` reference to a reusable workflow introduced in the same commit
+# (startup_failure, confirmed live) — the callee had to land on main first.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+jobs:
+  check:
+    uses: ./.github/workflows/front-desk-traceability.yml

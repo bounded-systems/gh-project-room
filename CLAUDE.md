@@ -19,6 +19,7 @@ the top.
 | `sync.ts` | Sweep entrypoint — reconcile fields → add items → write scores. |
 | `budget-check.ts` | CLI wrapper around `budgetGate()` for CI circuit-breaking. |
 | `health.ts` | Charter self-check — `healthReport()` (pure) + CLI. One row per invariant. |
+| `health-issue.ts` | Auto-file/update/close the health tracking issue when a gate is red (#64). |
 
 ## Workflows
 
@@ -66,4 +67,7 @@ deno task test
 | `FRONT_DESK_APP_CLIENT_ID` | GitHub App Client ID (from App settings page) |
 | `FRONT_DESK_APP_PRIVATE_KEY` | App PEM private key |
 
-The App needs: `organization projects: read + write`, `issues: read`, `metadata: read`.
+The App's actual installed grant (verified 2026-07-05): `organization_projects: admin`,
+`issues: write`, `contents: write`, `pull_requests: write`, `actions: read`, `workflows: write`,
+`metadata: read`. `issues: write` is what lets `health-issue.ts` (#64) file/update/close the
+tracking issue.

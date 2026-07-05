@@ -10,5 +10,5 @@ jobs:
         with: { deno-version: v2.x }
       - run: deno fmt --check
       - run: deno lint
-      - run: deno check contract.ts prioritization.ts projects.ts schema.ts sync.ts verbs.ts webhook.ts health.ts budget-check.ts traceability-check.ts
+      - run: deno check contract.ts prioritization.ts projects.ts schema.ts sync.ts verbs.ts webhook.ts health.ts budget-check.ts traceability-check.ts health-issue.ts
       - run: npx jsr publish --dry-run

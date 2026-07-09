@@ -28,4 +28,4 @@ jobs:
   sync:
     permissions:
       id-token: write
-    uses: bounded-systems/gh-project-room/.github/workflows/front-desk-sync.yml@main
+    uses: bounded-systems/gh-project-room/.github/workflows/front-desk-sync.yml@293e6d884867111c3f0d0886d4d305d37b27e2ed

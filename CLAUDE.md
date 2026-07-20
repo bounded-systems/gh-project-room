@@ -28,8 +28,15 @@ it back so the "Ready (ranked)" view shows the highest-value work at the top.
 `deno task ready` runs the `ready` verb (`verbs.ts` → dispatch), printing the top
 eligible items (open, no open blockers) ranked by Score with the signal
 breakdown. `--top N` and `--budget <id>` are supported. Because it's a verbspec
-verb it's also an MCP tool / OpenAPI op "for free" via `@bounded-systems/verbspec-mcp`
-(the mobile path — `serveStdio(VERBS, …)`).
+verb it's also an MCP tool / OpenAPI op "for free" via `@bounded-systems/verbspec-mcp`.
+
+`mcp.ts` (`deno task mcp`) is the Front Desk MCP server — `serveStdio(VERBS, …)`,
+projecting every verb (`ready` + the check-* contract verbs) as an MCP tool over
+stdio. Point a local MCP client (Claude Desktop / Claude Code) at
+`deno run --allow-net=api.github.com --allow-env mcp.ts` with `GITHUB_TOKEN` in
+its env (only the `ready` tool's read needs it). Reaching it from the Claude
+mobile app needs a remote HTTP transport in front of the same server
+(`buildMcpServer`) plus a host + auth — a deploy step, not yet done.
 
 The live board read sits behind the `BoardReader` seam (`ready.ts`), injected via
 the verb's `deps`. The default reader is this repo's Projects v2 client

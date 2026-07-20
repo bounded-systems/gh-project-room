@@ -14,11 +14,31 @@ it back so the "Ready (ranked)" view shows the highest-value work at the top.
 | ------------------- | ------------------------------------------------------------------------------- |
 | `contract.ts`       | Board schema — fields, views, workflows. JSR-exported.                          |
 | `prioritization.ts` | Pure scoring logic — `score()`, `planCapacity()`, `budgetGate()`. JSR-exported. |
+| `board-inputs.ts`   | Shared board-item → `PriorityInput` projection (`boardItemsToInputs`). Used by both `sync.ts` and the `ready` verb so scores never drift. |
 | `projects.ts`       | GraphQL client for GitHub Projects v2 API.                                      |
 | `sync.ts`           | Sweep entrypoint — reconcile fields → add items → write scores.                 |
+| `ready.ts`          | Ready-queue core — `readyReport()` (pure rank) + `readyView()` + `renderReadyTable()` + the default `BoardReader`. Wrapped by the `ready` verb. |
+| `verbs.ts`          | VerbSpec surface — the board contract + `ready` as dispatchable verbs (CLI today; MCP/OpenAPI for free). `actor: "front-desk"`. |
 | `budget-check.ts`   | CLI wrapper around `budgetGate()` for CI circuit-breaking.                      |
 | `health.ts`         | Charter self-check — `healthReport()` (pure) + CLI. One row per invariant.      |
 | `health-issue.ts`   | Auto-file/update/close the health tracking issue when a gate is red (#64).      |
+
+### The `ready` verb — "what should I work on next?"
+
+`deno task ready` runs the `ready` verb (`verbs.ts` → dispatch), printing the top
+eligible items (open, no open blockers) ranked by Score with the signal
+breakdown. `--top N` and `--budget <id>` are supported. Because it's a verbspec
+verb it's also an MCP tool / OpenAPI op "for free" via `@bounded-systems/verbspec-mcp`
+(the mobile path — `serveStdio(VERBS, …)`).
+
+The live board read sits behind the `BoardReader` seam (`ready.ts`), injected via
+the verb's `deps`. The default reader is this repo's Projects v2 client
+(`fetchBoardItems`), which works anywhere a `GITHUB_TOKEN` is present (the CI
+sweep, a token CLI). A scout-backed reader — routing the read through
+`scout-wire`'s `project` verb via the scout door (door-kit → scoutd) — can be
+injected in its place inside the claude-box sandbox, without touching the
+ranking. That scout wiring is a follow-up (needs `door-kit`/`door-scout`); the
+production sweep can't reach `scoutd`, so the default reader stays the CI path.
 
 ## Workflows
 

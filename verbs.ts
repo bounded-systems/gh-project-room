@@ -36,6 +36,14 @@ import {
   ViewSpecSchema,
   WorkflowSpecSchema,
 } from "./schema.ts";
+import {
+  type BoardReader,
+  fetchBoardItems,
+  readyReport,
+  type ReadyView,
+  readyView,
+  renderReadyTable,
+} from "./ready.ts";
 
 interface ClassifyKindInput {
   readonly kind: "Issue" | "PullRequest";
@@ -131,11 +139,75 @@ export const checkWorkflowVerb: VerbSpec<
   run: ({ existingWorkflows, spec }) => workflowStatus(existingWorkflows, spec),
 });
 
+// ---------------------------------------------------------------------------
+// ready — the ranked "what should I work on next?" queue. Unlike the pure
+// contract verbs above, this one reads the live board; the read is behind the
+// `BoardReader` seam (deps) so it can be backed by this repo's Projects v2
+// client today (fetchBoardItems) or scout-wire's `project` verb later, without
+// touching the ranking. The ranking itself (readyReport) stays pure and shared
+// with sync.ts via board-inputs.ts.
+// ---------------------------------------------------------------------------
+
+interface ReadyInput {
+  readonly top: number;
+  readonly budget?: string;
+}
+
+const ReadyInputSchema: z.ZodType<ReadyInput> = z.object({
+  top: z.coerce.number().int().min(1).max(100).default(10),
+  budget: z.string().optional(),
+});
+
+const ReadyViewItemSchema = z.object({
+  rank: z.number().int(),
+  item: z.string(),
+  score: z.number(),
+  density: z.number(),
+  unblocks: z.number().int(),
+  kind: BeadKindSchema,
+  effort: z.number(),
+  fitsRemaining: z.boolean(),
+});
+
+const ReadyOutputSchema: z.ZodType<ReadyView> = z.object({
+  items: z.array(ReadyViewItemSchema),
+  totalEligible: z.number().int(),
+  budgetId: z.string().optional(),
+  unknownBudget: z.boolean(),
+});
+
+interface ReadyDeps {
+  readonly readBoard: BoardReader;
+}
+
+export const readyVerb: VerbSpec<
+  typeof ReadyInputSchema,
+  typeof ReadyOutputSchema,
+  ReadyDeps
+> = defineVerb({
+  id: "ready",
+  summary:
+    "Show the Front Desk ready queue — top eligible items (open, no open blockers) ranked by Score, with the signal breakdown.",
+  actor: "front-desk",
+  input: ReadyInputSchema,
+  output: ReadyOutputSchema,
+  // Default read: this repo's Projects v2 client. Inject a scout-backed reader
+  // here (or via verbspec-mcp's `opts.deps`) to route the read through scout.
+  deps: () => ({ readBoard: fetchBoardItems }),
+  run: async ({ top, budget }, deps) => {
+    const read = deps?.readBoard ?? fetchBoardItems;
+    return readyView(readyReport(await read(), { top, budgetId: budget }));
+  },
+  // CLI human view; MCP/JSON-RPC use the structured output above.
+  render: (output) => renderReadyTable(output),
+});
+
 /** The dispatchable verb tree for this repo's contract (CLI/MCP/OpenAPI). */
 export const VERBS: Registry = {
   "classify-kind": classifyKindVerb,
   "check-view": checkViewVerb,
   "check-workflow": checkWorkflowVerb,
+  "ready": readyVerb,
 };
 
 if (import.meta.main) {
@@ -143,6 +215,13 @@ if (import.meta.main) {
   if (result.kind === "help") {
     console.log(result.text);
   } else {
-    console.log(render(result.output));
+    // Prefer the verb's own CLI renderer (e.g. ready's table); fall back to the
+    // library's JSON pretty-printer for verbs that don't define one.
+    const verb = VERBS[result.id];
+    console.log(
+      verb?.render
+        ? verb.render(result.output, result.input)
+        : render(result.output),
+    );
   }
 }

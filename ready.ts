@@ -1,16 +1,18 @@
 /**
  * @module
- * Front Desk ready queue — answers "what should I work on next?" from a Claude
- * Code session without opening the web UI. This is the CLI mirror of the
- * "Ready (ranked)" board view (contract.ts): eligible items (open, no open
- * blockers), highest Score first, with the signal breakdown behind each rank.
+ * Front Desk ready queue — the ranked "what should I work on next?" core.
  *
- * Read-only — a personal GITHUB_TOKEN is fine (see CLAUDE.md). It computes
- * scores through the same `boardItemsToInputs` → `prioritize` path the sweep
- * writes back, so the printed order matches the board.
- *
- * Run:  deno run --allow-net=api.github.com --allow-env ready.ts [--top N] [--budget <id>]
- * Env:  GITHUB_TOKEN (read-only reach is enough)
+ * This module is pure logic + a text renderer + the default board reader; the
+ * dispatchable surface lives in verbs.ts as the `ready` verbspec verb (CLI +
+ * MCP + OpenAPI for free, via the same VerbSpec). Split of concerns:
+ *   - `readyReport()`  — pure ranking (board items in, ranked rows out).
+ *   - `readyView()`    — flatten a report into the tool-facing shape (MCP
+ *                        structuredContent / verb output).
+ *   - `renderReadyTable()` — the human table (the verb's CLI `render`).
+ *   - `fetchBoardItems()`  — the default `BoardReader` (this repo's Projects v2
+ *                        client). Injected via the verb's `deps` so the read can
+ *                        later be backed by scout-wire's `project` verb (the
+ *                        scout door) without touching the ranking — see verbs.ts.
  */
 
 import {
@@ -20,6 +22,7 @@ import {
   type RankedItem,
 } from "./prioritization.ts";
 import { boardItemsToInputs } from "./board-inputs.ts";
+import type { BeadKind } from "./contract.ts";
 import type { BoardItem } from "./projects.ts";
 
 const DEFAULT_TOP = 10;
@@ -39,9 +42,9 @@ export interface ReadyReport {
   readonly rows: readonly ReadyRow[];
   /** Total eligible items before the `top` cap (so truncation is visible). */
   readonly totalEligible: number;
-  /** Budget the queue was scored against, if `--budget` was passed. */
+  /** Budget the queue was scored against, if one was named. */
   readonly budgetId?: string;
-  /** True when `--budget` named a budget not in ORG_BUDGETS (fail-open). */
+  /** True when a named budget was not in ORG_BUDGETS (fail-open). */
   readonly unknownBudget: boolean;
 }
 
@@ -49,8 +52,8 @@ export interface ReadyReport {
  * Pure core: board items in, ranked ready rows out. No network, no token —
  * unit-testable exactly like `healthReport()`.
  *
- * `--budget` threads the budget's `capacityPoints` into `prioritize()` so each
- * row's `fitsRemaining` reflects the greedy walk down the queue; without it the
+ * A budget threads its `capacityPoints` into `prioritize()` so each row's
+ * `fitsRemaining` reflects the greedy walk down the queue; without one the
  * remaining capacity is `Infinity` (everything fits).
  */
 export function readyReport(
@@ -85,43 +88,75 @@ export function readyReport(
 }
 
 // ---------------------------------------------------------------------------
-// CLI — the only I/O. Fetches live board data via projects.ts, prints the queue.
+// Tool-facing projection — the verb output / MCP structuredContent shape.
 // ---------------------------------------------------------------------------
 
-interface Args {
-  top?: number;
-  budgetId?: string;
+/** A single ready item, flattened for the verb output (kept mutable so it
+ * lines up 1:1 with the Zod output schema's inferred type in verbs.ts). */
+export interface ReadyViewItem {
+  rank: number;
+  item: string;
+  score: number;
+  density: number;
+  unblocks: number;
+  kind: BeadKind;
+  effort: number;
+  fitsRemaining: boolean;
 }
 
-function parseArgs(args: string[]): Args {
-  const out: Args = {};
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--top" && i + 1 < args.length) {
-      const n = parseInt(args[++i], 10);
-      if (!isNaN(n) && n > 0) out.top = n;
-    } else if (args[i] === "--budget" && i + 1 < args.length) {
-      out.budgetId = args[++i];
-    }
-  }
-  return out;
+/** Object-shaped projection of a ReadyReport (so MCP advertises an outputSchema
+ * and returns structuredContent rather than a bare array). */
+export interface ReadyView {
+  items: ReadyViewItem[];
+  totalEligible: number;
+  budgetId?: string;
+  unknownBudget: boolean;
 }
+
+/** Round to 2dp. */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** Flatten a ReadyReport into the tool-facing ReadyView. Pure. */
+export function readyView(report: ReadyReport): ReadyView {
+  return {
+    items: report.rows.map((row, i) => ({
+      rank: i + 1,
+      item: row.label,
+      score: round2(row.ranked.score),
+      density: round2(row.density),
+      unblocks: row.ranked.unblocks,
+      kind: row.ranked.kind,
+      effort: row.ranked.effort,
+      fitsRemaining: row.ranked.fitsRemaining,
+    })),
+    totalEligible: report.totalEligible,
+    unknownBudget: report.unknownBudget,
+    ...(report.budgetId !== undefined ? { budgetId: report.budgetId } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Text renderer — the verb's human-facing CLI view.
+// ---------------------------------------------------------------------------
 
 function fmt(n: number): string {
-  // Trim to 2dp but drop trailing ".00"/".x0" noise so the column stays tight.
-  return (Math.round(n * 100) / 100).toString();
+  return round2(n).toString();
 }
 
-function printReady(report: ReadyReport): void {
-  const showFits = report.budgetId !== undefined && !report.unknownBudget;
-  if (report.unknownBudget) {
-    console.log(
-      `budget "${report.budgetId}" not found in ORG_BUDGETS — ignoring (all items fit)`,
+/** Render a ReadyView as an aligned text table (the `ready` verb's CLI view). */
+export function renderReadyTable(view: ReadyView): string {
+  const out: string[] = [];
+  const showFits = view.budgetId !== undefined && !view.unknownBudget;
+  if (view.unknownBudget) {
+    out.push(
+      `budget "${view.budgetId}" not found in ORG_BUDGETS — ignoring (all items fit)`,
     );
   }
-
-  if (report.rows.length === 0) {
-    console.log("No ready items — nothing is actionable right now.");
-    return;
+  if (view.items.length === 0) {
+    out.push("No ready items — nothing is actionable right now.");
+    return out.join("\n");
   }
 
   const header = [
@@ -134,18 +169,17 @@ function printReady(report: ReadyReport): void {
     "EFFORT",
   ];
   if (showFits) header.push("FITS");
-  const rows = report.rows.map((row, i) => {
-    const r = row.ranked;
+  const rows = view.items.map((it) => {
     const cells = [
-      String(i + 1),
-      row.label,
-      fmt(r.score),
-      fmt(row.density),
-      String(r.unblocks),
-      r.kind,
-      fmt(r.effort),
+      String(it.rank),
+      it.item,
+      fmt(it.score),
+      fmt(it.density),
+      String(it.unblocks),
+      it.kind,
+      fmt(it.effort),
     ];
-    if (showFits) cells.push(r.fitsRemaining ? "yes" : "no");
+    if (showFits) cells.push(it.fitsRemaining ? "yes" : "no");
     return cells;
   });
 
@@ -155,28 +189,35 @@ function printReady(report: ReadyReport): void {
   const line = (cells: string[]) =>
     cells.map((cell, c) => cell.padEnd(widths[c])).join("  ").trimEnd();
 
-  console.log(line(header));
-  for (const cells of rows) console.log(line(cells));
+  out.push(line(header));
+  for (const cells of rows) out.push(line(cells));
 
-  const shown = report.rows.length;
-  const budgetNote = showFits ? ` against budget "${report.budgetId}"` : "";
-  console.log(
-    `\n${shown} of ${report.totalEligible} ready item(s)${budgetNote}` +
-      (shown < report.totalEligible ? ` (use --top to see more)` : ""),
+  const shown = view.items.length;
+  const budgetNote = showFits ? ` against budget "${view.budgetId}"` : "";
+  out.push(
+    `\n${shown} of ${view.totalEligible} ready item(s)${budgetNote}` +
+      (shown < view.totalEligible ? " (use --top to see more)" : ""),
   );
+  return out.join("\n");
 }
 
-async function main(): Promise<void> {
-  const { top, budgetId } = parseArgs(Deno.args);
+// ---------------------------------------------------------------------------
+// The board-read seam — the only I/O. Injected via the verb's `deps` so the
+// read can be swapped (Projects v2 client today; scout's `project` verb later).
+// ---------------------------------------------------------------------------
+
+/** A source of board items — the seam that decouples the read from the ranking. */
+export type BoardReader = () => Promise<readonly BoardItem[]>;
+
+/**
+ * Default reader: gh-project-room's own Projects v2 GraphQL client (projects.ts).
+ * Works wherever a GITHUB_TOKEN is available (CI sweep, token CLI). A
+ * scout-backed reader — calling scout-wire's `project` verb through the scout
+ * door (door-kit → scoutd) — can be injected in its place inside the claude-box
+ * sandbox, without changing the ranking. Read-only.
+ */
+export const fetchBoardItems: BoardReader = async () => {
   const { boardItems, getProject } = await import("./projects.ts");
   const project = await getProject();
-  const board = await boardItems(project.id);
-  printReady(readyReport(board, { top, budgetId }));
-}
-
-if (import.meta.main) {
-  main().catch((err) => {
-    console.error(err instanceof Error ? err.message : err);
-    Deno.exit(1);
-  });
-}
+  return boardItems(project.id);
+};

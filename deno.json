@@ -20,7 +20,7 @@
   "tasks": {
     "check": "deno check contract.ts prioritization.ts board-inputs.ts projects.ts schema.ts sync.ts ready.ts verbs.ts webhook.ts health.ts budget-check.ts traceability-check.ts health-issue.ts",
     "webhook": "deno run --allow-net --allow-env webhook.ts",
-    "ready": "deno run --allow-net=api.github.com --allow-env ready.ts",
+    "ready": "deno run --allow-net=api.github.com --allow-env verbs.ts ready",
     "health": "deno run --allow-net=api.github.com --allow-env health.ts",
     "health-issue": "deno run --allow-net=api.github.com --allow-env health-issue.ts",
     "test": "deno test",

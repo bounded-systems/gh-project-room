@@ -1,5 +1,5 @@
-import { assert, assertEquals } from "@std/assert";
-import { readyReport } from "./ready.ts";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { readyReport, readyView, renderReadyTable } from "./ready.ts";
 import type { BoardItem, BoardItemFields } from "./projects.ts";
 
 function boardItem(
@@ -117,4 +117,47 @@ Deno.test("readyReport: density and label are surfaced per row", () => {
   const report = readyReport(items);
   assertEquals(report.rows[0].label, "trellis#42");
   assertEquals(report.rows[0].density, 20); // value 80 / effort 4
+});
+
+Deno.test("readyView: flattens a report into ranked, tool-facing items", () => {
+  const items = [
+    boardItem({ number: 1, fields: { status: "Todo", effort: 10, value: 10 } }),
+    boardItem({
+      number: 2,
+      repo: "trellis",
+      fields: { status: "Todo", effort: 2, value: 80 },
+    }),
+  ];
+  const view = readyView(readyReport(items));
+  assertEquals(view.totalEligible, 2);
+  assertEquals(view.unknownBudget, false);
+  // Highest score first, ranks are 1-based and dense.
+  assertEquals(view.items.map((i) => [i.rank, i.item]), [
+    [1, "trellis#2"],
+    [2, "gh-project-room#1"],
+  ]);
+  assertEquals(view.items[0].density, 40); // 80 / 2
+  assertEquals(view.items[0].kind, "task");
+  // No budget -> everything fits.
+  assert(view.items.every((i) => i.fitsRemaining));
+});
+
+Deno.test("renderReadyTable: shows a header, rows, and a FITS column under budget", () => {
+  const items = Array.from({ length: 2 }, (_, i) =>
+    boardItem({
+      number: i + 1,
+      fields: { status: "Todo", effort: 6, value: 60 },
+    }));
+  const table = renderReadyTable(readyView(
+    readyReport(items, { budgetId: "rolling-5h" }),
+  ));
+  assertStringIncludes(table, "SCORE");
+  assertStringIncludes(table, "FITS");
+  assertStringIncludes(table, "gh-project-room#1");
+  assertStringIncludes(table, 'against budget "rolling-5h"');
+});
+
+Deno.test("renderReadyTable: empty queue prints a clear message", () => {
+  const table = renderReadyTable(readyView(readyReport([])));
+  assertStringIncludes(table, "No ready items");
 });

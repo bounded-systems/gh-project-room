@@ -16,8 +16,6 @@
  */
 
 import {
-  type BeadKind,
-  type BeadState,
   classifyKind,
   FRONT_DESK_FIELDS,
   FRONT_DESK_VIEWS,
@@ -25,47 +23,30 @@ import {
   SCORE_FIELD,
   TYPE_FIELD,
 } from "./contract.ts";
-import { type PriorityInput, score } from "./prioritization.ts";
+import { score } from "./prioritization.ts";
+import { boardItemsToInputs } from "./board-inputs.ts";
 import {
   addItem,
   applyField,
-  boardItems,
   checkView,
   checkWorkflow,
-  existingContentIds,
-  getProject,
   linkRepoToProject,
-  orgOpenWorkItems,
-  orgRepos,
   setNumberValue,
   setSingleSelectValue,
 } from "./projects.ts";
+import { type BoardReads, directReads } from "./reads.ts";
 
-/** Parse "#N" references out of a "Depends on" text field value. */
-function parseDependsOn(text: string | null): number[] {
-  if (!text) return [];
-  return (text.match(/#(\d+)/g) ?? []).map((m) => parseInt(m.slice(1), 10));
-}
-
-/** Map a Projects v2 Status option name to a BeadState. */
-function statusToBeadState(status: string | null): BeadState {
-  if (status === "In progress") return "in_progress";
-  if (status === "Blocked") return "blocked";
-  if (status === "Done") return "closed";
-  return "open";
-}
-
-async function main(): Promise<void> {
+async function main(reads: BoardReads = directReads): Promise<void> {
   const dryRun = Deno.env.get("DRY_RUN") === "1";
   const log = (m: string): void =>
     console.log(`${dryRun ? "[dry-run] " : ""}${m}`);
 
-  const project = await getProject();
+  const project = await reads.getProject();
   log(`Front Desk: "${project.title}" (${project.id})`);
 
   // 0. link all org repos to the project (idempotent — adds the Projects tab to each repo)
   // Requires repository admin access on the App; skipped gracefully if not granted.
-  const repos = await orgRepos();
+  const repos = await reads.orgRepos();
   log(`linking ${repos.length} repos to Front Desk…`);
   if (!dryRun) {
     const failed: string[] = [];
@@ -129,8 +110,8 @@ async function main(): Promise<void> {
   }
 
   // 4. sweep all repos and add anything missing
-  const onBoard = await existingContentIds(project.id);
-  const { items: work, skipped } = await orgOpenWorkItems();
+  const onBoard = await reads.existingContentIds(project.id);
+  const { items: work, skipped } = await reads.orgOpenWorkItems();
   if (skipped.length) {
     log(
       `could not read ${skipped.length} repo(s) — skipped (not aborting): ${
@@ -151,7 +132,7 @@ async function main(): Promise<void> {
   // idempotent and never clobbers a manually-chosen value.
   let kindField = project.fields.find((f) => f.name === TYPE_FIELD.name);
   if (!dryRun && !kindField) {
-    kindField = (await getProject()).fields.find((f) =>
+    kindField = (await reads.getProject()).fields.find((f) =>
       f.name === TYPE_FIELD.name
     );
   }
@@ -183,49 +164,26 @@ async function main(): Promise<void> {
 
   // 5. score write-back — compute Score for every on-board item; only write when
   //    the value has changed to avoid thrashing the activity feed.
-  const allItems = await boardItems(project.id);
+  const allItems = await reads.boardItems(project.id);
   let scoreField = project.fields.find((f) => f.name === SCORE_FIELD.name);
   if (!dryRun && !scoreField) {
     // Score field may have just been created in step 1 — re-fetch once.
-    scoreField = (await getProject()).fields.find(
+    scoreField = (await reads.getProject()).fields.find(
       (f) => f.name === SCORE_FIELD.name,
     );
   }
   if (!scoreField && !dryRun) {
     log("Score field not found — skipping score write-back");
   } else {
-    // Build a status lookup and a reverse-dependency count in one pass.
-    const statusByNumber = new Map<number, string | null>(
-      allItems.map((i) => [i.number, i.fields.status]),
-    );
-    const unblocksCounts = new Map<number, number>();
-    for (const item of allItems) {
-      if (item.fields.status === "Done") continue;
-      for (const dep of parseDependsOn(item.fields.dependsOn)) {
-        unblocksCounts.set(dep, (unblocksCounts.get(dep) ?? 0) + 1);
-      }
-    }
+    // Project each board item to a PriorityInput via the shared path (the same
+    // one ready.ts uses) so the CLI ready queue and the written Score never
+    // drift. Order is preserved, so index-align back to allItems below.
+    const inputs = boardItemsToInputs(allItems);
 
     let written = 0;
-    for (const item of allItems) {
-      const deps = parseDependsOn(item.fields.dependsOn);
-      // A dependency is still open unless it's on the board and marked Done.
-      const openBlockers = deps.filter(
-        (dep) => statusByNumber.get(dep) !== "Done",
-      ).length;
-      const input: PriorityInput = {
-        number: item.number,
-        title: `#${item.number}`,
-        kind: (item.fields.kind as BeadKind | null) ?? "task",
-        state: statusToBeadState(item.fields.status),
-        effort: item.fields.effort ?? 0,
-        value: item.fields.value ?? 0,
-        openBlockers,
-        unblocks: unblocksCounts.get(item.number) ?? 0,
-        ageDays: (Date.now() - new Date(item.createdAt).getTime()) /
-          (1000 * 60 * 60 * 24),
-      };
-      const newScore = Math.round(score(input) * 100) / 100;
+    for (let i = 0; i < allItems.length; i++) {
+      const item = allItems[i];
+      const newScore = Math.round(score(inputs[i]) * 100) / 100;
       const cur = item.fields.score;
       // Anti-thrash: skip if no meaningful change.
       if (cur === null && newScore === 0) continue;

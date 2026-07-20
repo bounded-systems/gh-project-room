@@ -14,11 +14,44 @@ it back so the "Ready (ranked)" view shows the highest-value work at the top.
 | ------------------- | ------------------------------------------------------------------------------- |
 | `contract.ts`       | Board schema — fields, views, workflows. JSR-exported.                          |
 | `prioritization.ts` | Pure scoring logic — `score()`, `planCapacity()`, `budgetGate()`. JSR-exported. |
+| `board-inputs.ts`   | Shared board-item → `PriorityInput` projection (`boardItemsToInputs`). Used by both `sync.ts` and the `ready` verb so scores never drift. |
 | `projects.ts`       | GraphQL client for GitHub Projects v2 API.                                      |
+| `reads.ts`          | The read seam — `BoardReads` port + `directReads` adapter. Every query/get goes through it; see `docs/reads-through-scout.md`. |
 | `sync.ts`           | Sweep entrypoint — reconcile fields → add items → write scores.                 |
+| `ready.ts`          | Ready-queue core — `readyReport()` (pure rank) + `readyView()` + `renderReadyTable()` + the default `BoardReader`. Wrapped by the `ready` verb. |
+| `verbs.ts`          | VerbSpec surface — the board contract + `ready` as dispatchable verbs (CLI today; MCP/OpenAPI for free). `actor: "front-desk"`. |
 | `budget-check.ts`   | CLI wrapper around `budgetGate()` for CI circuit-breaking.                      |
 | `health.ts`         | Charter self-check — `healthReport()` (pure) + CLI. One row per invariant.      |
 | `health-issue.ts`   | Auto-file/update/close the health tracking issue when a gate is red (#64).      |
+
+### The `ready` verb — "what should I work on next?"
+
+`deno task ready` runs the `ready` verb (`verbs.ts` → dispatch), printing the top
+eligible items (open, no open blockers) ranked by Score with the signal
+breakdown. `--top N` and `--budget <id>` are supported. Because it's a verbspec
+verb it's also an MCP tool / OpenAPI op "for free" via `@bounded-systems/verbspec-mcp`.
+
+`mcp.ts` (`deno task mcp`) is the Front Desk MCP server — `serveStdio(VERBS, …)`,
+projecting every verb (`ready` + the check-* contract verbs) as an MCP tool over
+stdio. Point a local MCP client (Claude Desktop / Claude Code) at
+`deno run --allow-net=api.github.com --allow-env mcp.ts` with `GITHUB_TOKEN` in
+its env (only the `ready` tool's read needs it). Reaching it from the Claude
+mobile app needs a remote HTTP transport in front of the same server
+(`buildMcpServer`) plus a host + auth — a deploy step, not yet done.
+
+### Reads go through one seam (`reads.ts`)
+
+Every query/get — `getProject`/`boardItems`, `orgOpenWorkItems`,
+`orgMergedPullRequests`, `existingContentIds`, `orgRepos` — goes through the
+`BoardReads` port. `sync.ts`, `health.ts`, and the `ready` verb take it as an
+injectable dependency defaulting to `directReads` (this repo's Projects v2
+client). The intended end-state routes reads through the **scout door** — where
+`github-budget` does the rate-limited request and `cas` + `anchored-chain`
+cache + invalidate — by injecting a scout-backed adapter in place of
+`directReads`. **This repo never caches; that's the scout layer's job.** The
+production sweep (`front-desk-sync.yml`, in GitHub Actions) can't reach `scoutd`,
+so it keeps `directReads`; the scout adapter is for in-box runs. Full design:
+`docs/reads-through-scout.md`.
 
 ## Workflows
 

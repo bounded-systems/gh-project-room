@@ -6,6 +6,7 @@
     ".": "./contract.ts",
     "./prioritization": "./prioritization.ts",
     "./board-inputs": "./board-inputs.ts",
+    "./reads": "./reads.ts",
     "./sync": "./sync.ts",
     "./ready": "./ready.ts",
     "./verbs": "./verbs.ts",
@@ -19,7 +20,7 @@
     "@std/assert": "jsr:@std/assert@^1"
   },
   "tasks": {
-    "check": "deno check contract.ts prioritization.ts board-inputs.ts projects.ts schema.ts sync.ts ready.ts verbs.ts mcp.ts webhook.ts health.ts budget-check.ts traceability-check.ts health-issue.ts",
+    "check": "deno check contract.ts prioritization.ts board-inputs.ts projects.ts reads.ts schema.ts sync.ts ready.ts verbs.ts mcp.ts webhook.ts health.ts budget-check.ts traceability-check.ts health-issue.ts",
     "webhook": "deno run --allow-net --allow-env webhook.ts",
     "ready": "deno run --allow-net=api.github.com --allow-env verbs.ts ready",
     "mcp": "deno run --allow-net=api.github.com --allow-env mcp.ts",
@@ -44,6 +45,7 @@
       "contract.ts",
       "prioritization.ts",
       "board-inputs.ts",
+      "reads.ts",
       "projects.ts",
       "sync.ts",
       "ready.ts",

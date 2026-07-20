@@ -28,29 +28,25 @@ import { boardItemsToInputs } from "./board-inputs.ts";
 import {
   addItem,
   applyField,
-  boardItems,
   checkView,
   checkWorkflow,
-  existingContentIds,
-  getProject,
   linkRepoToProject,
-  orgOpenWorkItems,
-  orgRepos,
   setNumberValue,
   setSingleSelectValue,
 } from "./projects.ts";
+import { type BoardReads, directReads } from "./reads.ts";
 
-async function main(): Promise<void> {
+async function main(reads: BoardReads = directReads): Promise<void> {
   const dryRun = Deno.env.get("DRY_RUN") === "1";
   const log = (m: string): void =>
     console.log(`${dryRun ? "[dry-run] " : ""}${m}`);
 
-  const project = await getProject();
+  const project = await reads.getProject();
   log(`Front Desk: "${project.title}" (${project.id})`);
 
   // 0. link all org repos to the project (idempotent — adds the Projects tab to each repo)
   // Requires repository admin access on the App; skipped gracefully if not granted.
-  const repos = await orgRepos();
+  const repos = await reads.orgRepos();
   log(`linking ${repos.length} repos to Front Desk…`);
   if (!dryRun) {
     const failed: string[] = [];
@@ -114,8 +110,8 @@ async function main(): Promise<void> {
   }
 
   // 4. sweep all repos and add anything missing
-  const onBoard = await existingContentIds(project.id);
-  const { items: work, skipped } = await orgOpenWorkItems();
+  const onBoard = await reads.existingContentIds(project.id);
+  const { items: work, skipped } = await reads.orgOpenWorkItems();
   if (skipped.length) {
     log(
       `could not read ${skipped.length} repo(s) — skipped (not aborting): ${
@@ -136,7 +132,7 @@ async function main(): Promise<void> {
   // idempotent and never clobbers a manually-chosen value.
   let kindField = project.fields.find((f) => f.name === TYPE_FIELD.name);
   if (!dryRun && !kindField) {
-    kindField = (await getProject()).fields.find((f) =>
+    kindField = (await reads.getProject()).fields.find((f) =>
       f.name === TYPE_FIELD.name
     );
   }
@@ -168,11 +164,11 @@ async function main(): Promise<void> {
 
   // 5. score write-back — compute Score for every on-board item; only write when
   //    the value has changed to avoid thrashing the activity feed.
-  const allItems = await boardItems(project.id);
+  const allItems = await reads.boardItems(project.id);
   let scoreField = project.fields.find((f) => f.name === SCORE_FIELD.name);
   if (!dryRun && !scoreField) {
     // Score field may have just been created in step 1 — re-fetch once.
-    scoreField = (await getProject()).fields.find(
+    scoreField = (await reads.getProject()).fields.find(
       (f) => f.name === SCORE_FIELD.name,
     );
   }

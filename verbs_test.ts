@@ -1,6 +1,24 @@
 import { assert, assertEquals } from "@std/assert";
 import { readyVerb, VERBS } from "./verbs.ts";
-import type { BoardItem, BoardItemFields } from "./projects.ts";
+import type { BoardReads } from "./reads.ts";
+import type { BoardItem, BoardItemFields, Project } from "./projects.ts";
+
+/** A read-port slice backed by a fixed in-memory board — no network. */
+function fakeReads(
+  board: BoardItem[],
+): Pick<BoardReads, "getProject" | "boardItems"> {
+  const project: Project = {
+    id: "PVT_test",
+    title: "Front Desk",
+    fields: [],
+    views: [],
+    workflows: [],
+  };
+  return {
+    getProject: () => Promise.resolve(project),
+    boardItems: () => Promise.resolve(board),
+  };
+}
 
 function boardItem(
   overrides: Partial<Omit<BoardItem, "fields">> & {
@@ -43,10 +61,8 @@ Deno.test("ready verb: ranks board items from the injected reader (no network)",
     }),
     boardItem({ number: 3, fields: { status: "Blocked" } }), // ineligible
   ];
-  // Inject the reader via deps — the seam that a scout-backed reader will use.
-  const out = await readyVerb.run({ top: 10 }, {
-    readBoard: () => Promise.resolve(board),
-  });
+  // Inject reads via deps — the port slice a scout-backed adapter will supply.
+  const out = await readyVerb.run({ top: 10 }, { reads: fakeReads(board) });
   assertEquals(out.totalEligible, 2);
   assertEquals(out.items.map((i) => i.item), [
     "trellis#2",
@@ -62,7 +78,7 @@ Deno.test("ready verb: --budget threads capacity into fitsRemaining", async () =
       fields: { status: "Todo", effort: 6, value: 60 },
     }));
   const out = await readyVerb.run({ top: 10, budget: "rolling-5h" }, {
-    readBoard: () => Promise.resolve(board),
+    reads: fakeReads(board),
   });
   // rolling-5h capacity 10: first fits (10->4), rest don't.
   assertEquals(out.items.map((i) => i.fitsRemaining), [true, false, false]);

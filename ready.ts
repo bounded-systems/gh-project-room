@@ -2,17 +2,14 @@
  * @module
  * Front Desk ready queue — the ranked "what should I work on next?" core.
  *
- * This module is pure logic + a text renderer + the default board reader; the
- * dispatchable surface lives in verbs.ts as the `ready` verbspec verb (CLI +
- * MCP + OpenAPI for free, via the same VerbSpec). Split of concerns:
+ * This module is pure logic + a text renderer; the dispatchable surface lives in
+ * verbs.ts as the `ready` verbspec verb (CLI + MCP + OpenAPI for free, via the
+ * same VerbSpec), which supplies the board read through the `reads.ts` port.
+ * Split of concerns:
  *   - `readyReport()`  — pure ranking (board items in, ranked rows out).
  *   - `readyView()`    — flatten a report into the tool-facing shape (MCP
  *                        structuredContent / verb output).
  *   - `renderReadyTable()` — the human table (the verb's CLI `render`).
- *   - `fetchBoardItems()`  — the default `BoardReader` (this repo's Projects v2
- *                        client). Injected via the verb's `deps` so the read can
- *                        later be backed by scout-wire's `project` verb (the
- *                        scout door) without touching the ranking — see verbs.ts.
  */
 
 import {
@@ -200,24 +197,3 @@ export function renderReadyTable(view: ReadyView): string {
   );
   return out.join("\n");
 }
-
-// ---------------------------------------------------------------------------
-// The board-read seam — the only I/O. Injected via the verb's `deps` so the
-// read can be swapped (Projects v2 client today; scout's `project` verb later).
-// ---------------------------------------------------------------------------
-
-/** A source of board items — the seam that decouples the read from the ranking. */
-export type BoardReader = () => Promise<readonly BoardItem[]>;
-
-/**
- * Default reader: gh-project-room's own Projects v2 GraphQL client (projects.ts).
- * Works wherever a GITHUB_TOKEN is available (CI sweep, token CLI). A
- * scout-backed reader — calling scout-wire's `project` verb through the scout
- * door (door-kit → scoutd) — can be injected in its place inside the claude-box
- * sandbox, without changing the ranking. Read-only.
- */
-export const fetchBoardItems: BoardReader = async () => {
-  const { boardItems, getProject } = await import("./projects.ts");
-  const project = await getProject();
-  return boardItems(project.id);
-};

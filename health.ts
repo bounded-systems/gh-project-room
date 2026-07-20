@@ -18,6 +18,7 @@
  */
 
 import type { BoardItem, MergedPRInfo, OrgWorkItems } from "./projects.ts";
+import { type BoardReads, directReads } from "./reads.ts";
 
 export type HealthRowKind = "gate" | "report";
 
@@ -198,14 +199,12 @@ function printScorecard(card: Scorecard): void {
   );
 }
 
-async function main(): Promise<void> {
-  const { boardItems, getProject, orgMergedPullRequests, orgOpenWorkItems } =
-    await import("./projects.ts");
-  const project = await getProject();
+async function main(reads: BoardReads = directReads): Promise<void> {
+  const project = await reads.getProject();
   const [board, openWork, merged] = await Promise.all([
-    boardItems(project.id),
-    orgOpenWorkItems(),
-    orgMergedPullRequests(),
+    reads.boardItems(project.id),
+    reads.orgOpenWorkItems(),
+    reads.orgMergedPullRequests(),
   ]);
   if (openWork.skipped.length) {
     console.log(

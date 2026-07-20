@@ -37,13 +37,12 @@ import {
   WorkflowSpecSchema,
 } from "./schema.ts";
 import {
-  type BoardReader,
-  fetchBoardItems,
   readyReport,
   type ReadyView,
   readyView,
   renderReadyTable,
 } from "./ready.ts";
+import { type BoardReads, directReads } from "./reads.ts";
 
 interface ClassifyKindInput {
   readonly kind: "Issue" | "PullRequest";
@@ -176,27 +175,32 @@ const ReadyOutputSchema: z.ZodType<ReadyView> = z.object({
   unknownBudget: z.boolean(),
 });
 
+// `ready` needs just the two board reads; it depends on that slice of the port,
+// so a test (or a scout adapter) can supply a minimal fake.
 interface ReadyDeps {
-  readonly readBoard: BoardReader;
+  readonly reads: Pick<BoardReads, "getProject" | "boardItems">;
 }
 
 export const readyVerb: VerbSpec<
   typeof ReadyInputSchema,
   typeof ReadyOutputSchema,
   ReadyDeps
-> = defineVerb({
+> = defineVerb<typeof ReadyInputSchema, typeof ReadyOutputSchema, ReadyDeps>({
   id: "ready",
   summary:
     "Show the Front Desk ready queue — top eligible items (open, no open blockers) ranked by Score, with the signal breakdown.",
   actor: "front-desk",
   input: ReadyInputSchema,
   output: ReadyOutputSchema,
-  // Default read: this repo's Projects v2 client. Inject a scout-backed reader
-  // here (or via verbspec-mcp's `opts.deps`) to route the read through scout.
-  deps: () => ({ readBoard: fetchBoardItems }),
+  // Default read: this repo's Projects v2 client (reads.ts). Inject a
+  // scout-backed adapter here (or via verbspec-mcp's `opts.deps`) to route the
+  // read through the scout door instead.
+  deps: () => ({ reads: directReads }),
   run: async ({ top, budget }, deps) => {
-    const read = deps?.readBoard ?? fetchBoardItems;
-    return readyView(readyReport(await read(), { top, budgetId: budget }));
+    const reads = deps?.reads ?? directReads;
+    const project = await reads.getProject();
+    const items = await reads.boardItems(project.id);
+    return readyView(readyReport(items, { top, budgetId: budget }));
   },
   // CLI human view; MCP/JSON-RPC use the structured output above.
   render: (output) => renderReadyTable(output),

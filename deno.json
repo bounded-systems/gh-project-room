@@ -46,6 +46,7 @@
       "prioritization.ts",
       "board-inputs.ts",
       "reads.ts",
+      "scout-reads.ts",
       "projects.ts",
       "sync.ts",
       "ready.ts",

@@ -42,7 +42,7 @@ import {
   readyView,
   renderReadyTable,
 } from "./ready.ts";
-import { type BoardReads, directReads } from "./reads.ts";
+import { type BoardReads, resolveReads } from "./reads.ts";
 
 interface ClassifyKindInput {
   readonly kind: "Issue" | "PullRequest";
@@ -192,12 +192,13 @@ export const readyVerb: VerbSpec<
   actor: "front-desk",
   input: ReadyInputSchema,
   output: ReadyOutputSchema,
-  // Default read: this repo's Projects v2 client (reads.ts). Inject a
-  // scout-backed adapter here (or via verbspec-mcp's `opts.deps`) to route the
-  // read through the scout door instead.
-  deps: () => ({ reads: directReads }),
+  // Default read: `resolveReads()` picks by environment — the scout door when
+  // one is mounted (in-box, no token), else this repo's Projects v2 client. An
+  // explicit adapter can still be injected here (or via verbspec-mcp's
+  // `opts.deps`).
+  deps: () => ({ reads: resolveReads() }),
   run: async ({ top, budget }, deps) => {
-    const reads = deps?.reads ?? directReads;
+    const reads = deps?.reads ?? resolveReads();
     const project = await reads.getProject();
     const items = await reads.boardItems(project.id);
     return readyView(readyReport(items, { top, budgetId: budget }));

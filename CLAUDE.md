@@ -16,7 +16,8 @@ it back so the "Ready (ranked)" view shows the highest-value work at the top.
 | `prioritization.ts` | Pure scoring logic — `score()`, `planCapacity()`, `budgetGate()`. JSR-exported. |
 | `board-inputs.ts`   | Shared board-item → `PriorityInput` projection (`boardItemsToInputs`). Used by both `sync.ts` and the `ready` verb so scores never drift. |
 | `projects.ts`       | GraphQL client for GitHub Projects v2 API.                                      |
-| `reads.ts`          | The read seam — `BoardReads` port + `directReads` adapter. Every query/get goes through it; see `docs/reads-through-scout.md`. |
+| `reads.ts`          | The read seam — `BoardReads` port + `directReads` adapter + `resolveReads()` (env-based adapter selection). Every query/get goes through it; see `docs/reads-through-scout.md`. |
+| `scout-reads.ts`    | The scout-backed `BoardReads` adapter — routes each read through scout-wire's `project`/`repos`/`orgOpenWork`/`orgMergedPrs` verbs via the scout door (Deno unix/TCP transport into `scoutd`). Holds no token; for in-box runs. |
 | `sync.ts`           | Sweep entrypoint — reconcile fields → add items → write scores.                 |
 | `ready.ts`          | Ready-queue core — `readyReport()` (pure rank) + `readyView()` + `renderReadyTable()` + the default `BoardReader`. Wrapped by the `ready` verb. |
 | `verbs.ts`          | VerbSpec surface — the board contract + `ready` as dispatchable verbs (CLI today; MCP/OpenAPI for free). `actor: "front-desk"`. |
@@ -44,14 +45,14 @@ mobile app needs a remote HTTP transport in front of the same server
 Every query/get — `getProject`/`boardItems`, `orgOpenWorkItems`,
 `orgMergedPullRequests`, `existingContentIds`, `orgRepos` — goes through the
 `BoardReads` port. `sync.ts`, `health.ts`, and the `ready` verb take it as an
-injectable dependency defaulting to `directReads` (this repo's Projects v2
-client). The intended end-state routes reads through the **scout door** — where
+injectable dependency; `resolveReads()` picks the adapter by environment. In-box
+(a `--scout` door mounted, `SCOUTD_SOCK`/`SCOUTD_HOST` set, no token) it routes
+reads through the **scout door** via `scoutReads` (`scout-reads.ts`) — where
 `github-budget` does the rate-limited request and `cas` + `anchored-chain`
-cache + invalidate — by injecting a scout-backed adapter in place of
-`directReads`. **This repo never caches; that's the scout layer's job.** The
-production sweep (`front-desk-sync.yml`, in GitHub Actions) can't reach `scoutd`,
-so it keeps `directReads`; the scout adapter is for in-box runs. Full design:
-`docs/reads-through-scout.md`.
+cache + invalidate. **This repo never caches; that's the scout layer's job.** The
+production sweep (`front-desk-sync.yml`, in GitHub Actions) has a token and no
+`scoutd`, so it stays on `directReads`. The `ready` verb now goes through scout
+in-box for free. Full design: `docs/reads-through-scout.md`.
 
 ## Workflows
 

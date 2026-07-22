@@ -10,10 +10,14 @@
  *     (projects.ts). Works wherever a GITHUB_TOKEN is present: the CI sweep
  *     (front-desk-sync.yml runs in GitHub Actions, outside claude-box) and any
  *     token CLI.
- *   - a scout-backed adapter (follow-up, not here) — routes each read through
- *     scout-wire's `project`/`issue`/`pr`/`repo` verbs via the scout door
+ *   - `scoutReads` (scout-reads.ts) — routes each read through scout-wire's
+ *     `project`/`repos`/`orgOpenWork`/`orgMergedPrs` verbs via the scout door
  *     (door-kit → scoutd), where the real request is governed (`github-budget`)
- *     and content-addressed + invalidated (`cas` + `anchored-chain`).
+ *     and content-addressed + invalidated (`cas` + `anchored-chain`). Holds no
+ *     token — for in-box runs (e.g. `ready` reached from Claude Code / mobile).
+ *
+ * `resolveReads()` picks between them by environment: a scout door present
+ * (SCOUTD_SOCK / SCOUTD_HOST) → `scoutReads`; otherwise `directReads`.
  *
  * IMPORTANT: this repo does NOT cache. Caching belongs to the layer behind the
  * scout door (cas/anchored-chain); `directReads` is a thin pass-through. See
@@ -28,6 +32,7 @@ import {
   orgOpenWorkItems,
   orgRepos,
 } from "./projects.ts";
+import { scoutReads } from "./scout-reads.ts";
 
 /**
  * The board read-port — the set of read-only GitHub queries this repo needs.
@@ -62,3 +67,14 @@ export const directReads: BoardReads = {
   existingContentIds,
   orgRepos,
 };
+
+/**
+ * Pick the read adapter for the current environment. In-box (a `--scout` door
+ * is mounted, so `SCOUTD_SOCK`/`SCOUTD_HOST` is set and there is no token) →
+ * `scoutReads`; anywhere a token is in hand (the CI sweep, a token CLI) →
+ * `directReads`. Callers that want a specific adapter can still inject one.
+ */
+export function resolveReads(): BoardReads {
+  const scoutDoor = Deno.env.get("SCOUTD_SOCK") ?? Deno.env.get("SCOUTD_HOST");
+  return scoutDoor ? scoutReads : directReads;
+}

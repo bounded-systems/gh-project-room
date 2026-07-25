@@ -173,31 +173,6 @@ export const DEPENDS_ON_FIELD: TextFieldSpec = {
 export const NATIVE_FIELDS = ["Milestone", "Parent issue"] as const;
 
 /**
- * `Start date` / `Target date` — DATE fields that power the Roadmap view (#78).
- *
- * The Roadmap renders each item as a bar spanning Start date → Target date; with
- * only one set, the item shows as a point. The `Roadmap` ViewSpec already points
- * at `"Start date and Target date"`, so these fields must exist for it to render.
- *
- * Unlike views and insights, DATE fields have a clean `createProjectV2Field`
- * mutation, so the sweep creates them like any other custom field. They
- * complement the native `Milestone` (release grouping) with an explicit per-item
- * planning window. Assigning the actual dates/milestones to items remains a
- * manual/operational step — see #78.
- */
-export const START_DATE_FIELD: DateFieldSpec = {
-  kind: "DATE",
-  name: "Start date",
-  builtIn: false,
-};
-
-export const TARGET_DATE_FIELD: DateFieldSpec = {
-  kind: "DATE",
-  name: "Target date",
-  builtIn: false,
-};
-
-/**
  * `Effort` — abstract effort-point estimate for `prioritization.ts`.
  *
  * Read by the prioritizer as `PriorityInput.effort` (EffortPoints). Treated as 1
@@ -241,8 +216,6 @@ export const FRONT_DESK_FIELDS: readonly FieldSpec[] = [
   TYPE_FIELD,
   STATUS_FIELD,
   DEPENDS_ON_FIELD,
-  START_DATE_FIELD,
-  TARGET_DATE_FIELD,
   EFFORT_FIELD,
   VALUE_FIELD,
   SCORE_FIELD,
@@ -374,7 +347,6 @@ export const FRONT_DESK_VIEWS: readonly ViewSpec[] = [
   {
     name: "Roadmap",
     layout: "ROADMAP",
-    dates: "Start date and Target date",
     zoomLevel: "Month",
   },
 ];
@@ -622,7 +594,7 @@ export const BEADS_PROJECTIONS: readonly BeadsProjectionSpec[] = [
     ghField: "Milestone (native)",
     projected: false,
     notes:
-      "Pending #78 — create milestones, set Start/Target date fields on epics. Charts show 'No Milestone' until done.",
+      "Pending #78 — create milestones and assign epics. Charts show 'No Milestone' until done. (Sequencing is budget/dependency-driven, not date-driven — see prioritization.ts; the Start/Target date fields were removed 2026-07-25 to allow public project visibility.)",
   },
   {
     beadsConcept: "related, discovered-from edges",

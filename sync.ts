@@ -35,6 +35,7 @@ import {
   setSingleSelectValue,
 } from "./projects.ts";
 import { type BoardReads, directReads } from "./reads.ts";
+import { contractStale } from "./contract-guard.ts";
 
 async function main(reads: BoardReads = directReads): Promise<void> {
   const dryRun = Deno.env.get("DRY_RUN") === "1";
@@ -66,22 +67,44 @@ async function main(reads: BoardReads = directReads): Promise<void> {
     log(`would link: ${repos.map((r) => r.name).join(", ")}`);
   }
 
-  // 1. apply the contract
-  for (const spec of FRONT_DESK_FIELDS) {
-    if (dryRun) {
-      const present = project.fields.some((f) => f.name === spec.name);
-      log(`field "${spec.name}": ${present ? "present" : "would create"}`);
-      continue;
-    }
-    const r = await applyField(project, spec);
-    if (r.action === "needs-manual") {
-      log(
-        `field "${r.field}": MANUAL — add option(s) in the UI: ${
-          r.missingOptions.join(", ")
-        }`,
-      );
-    } else {
-      log(`field "${r.field}": ${r.action}`);
+  // 1. apply the contract — GUARDED (#83). Skip field reconciliation if this
+  //    run's contract.ts is stale (main has a newer one), so a stale sweep can't
+  //    re-create fields the newer contract removed. Fail-open: only skips when
+  //    proven stale; add-items + scores below still run.
+  const guard = await contractStale({
+    token: Deno.env.get("GITHUB_TOKEN"),
+    // The checked-out gh-project-room commit. CONTRACT_REF_SHA is set by the
+    // workflow (git rev-parse HEAD after checkout) — authoritative even for
+    // cross-repo workflow_call, where GITHUB_SHA is the CALLER's commit. Falls
+    // back to GITHUB_SHA (correct for schedule/dispatch/self-push triggers).
+    runningSha: Deno.env.get("CONTRACT_REF_SHA") ?? Deno.env.get("GITHUB_SHA"),
+  });
+  if (guard.stale) {
+    log(
+      `⚠ contract-first guard (#83): contract.ts changed on main since this run's checkout ` +
+        `(running ${guard.running?.slice(0, 7)} ≠ main ${
+          guard.mainSha?.slice(0, 7)
+        }) — ` +
+        `SKIPPING field reconcile so this stale contract can't re-create removed fields. ` +
+        `The sweep on the newer commit applies the correct schema.`,
+    );
+  } else {
+    for (const spec of FRONT_DESK_FIELDS) {
+      if (dryRun) {
+        const present = project.fields.some((f) => f.name === spec.name);
+        log(`field "${spec.name}": ${present ? "present" : "would create"}`);
+        continue;
+      }
+      const r = await applyField(project, spec);
+      if (r.action === "needs-manual") {
+        log(
+          `field "${r.field}": MANUAL — add option(s) in the UI: ${
+            r.missingOptions.join(", ")
+          }`,
+        );
+      } else {
+        log(`field "${r.field}": ${r.action}`);
+      }
     }
   }
 

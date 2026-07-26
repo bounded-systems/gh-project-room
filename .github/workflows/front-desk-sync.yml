@@ -84,7 +84,13 @@ jobs:
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ steps.broker-token.outputs.token }}
-        run: deno run --allow-net=api.github.com --allow-env sync.ts
+        # CONTRACT_REF_SHA = the checked-out gh-project-room commit, so the
+        # contract-first guard (#83) compares THIS run's contract.ts to main's —
+        # authoritative even under cross-repo workflow_call (where GITHUB_SHA is
+        # the caller's commit).
+        run: |
+          export CONTRACT_REF_SHA="$(git rev-parse HEAD)"
+          deno run --allow-net=api.github.com --allow-env sync.ts
       # File/update/close the health tracking issue (#64) — the top of the
       # dogfood ladder. Reuses this job's already-minted token (no second
       # OIDC round trip); best-effort like the sweep itself.

@@ -232,6 +232,42 @@ async function getProject(token: string): Promise<ProjectRef> {
   };
 }
 
+/** The scheduler repo whose delta sync mirrors the board to DoltHub. */
+const MIRROR_REPO = "bounded-systems/front-desk-scheduler";
+
+/**
+ * Fire a `repository_dispatch` at the mirror's delta-sync workflow so the DoltHub
+ * read plane refreshes in near-real-time on this board change, instead of waiting
+ * for the hourly poll. Best-effort: a failure here must never fail the webhook
+ * (the scheduled delta + full sweep are the backstops). Needs `contents: write`
+ * on MIRROR_REPO, which the org-wide App installation token carries.
+ */
+async function dispatchMirrorDelta(
+  token: string,
+  reason: string,
+): Promise<void> {
+  const res = await fetch(
+    `https://api.github.com/repos/${MIRROR_REPO}/dispatches`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "gh-project-room",
+      },
+      body: JSON.stringify({
+        event_type: "board-changed",
+        client_payload: { reason },
+      }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(
+      `repository_dispatch failed: ${res.status} ${await res.text()}`,
+    );
+  }
+}
+
 async function addToBoard(
   token: string,
   projectId: string,
@@ -423,6 +459,18 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
           optionId,
         );
       }
+    }
+
+    // Refresh the DoltHub mirror in near-real-time (best-effort; the scheduled
+    // delta + full sweep backstop it, so a dispatch failure never fails here).
+    try {
+      await dispatchMirrorDelta(token, `${repo}:${c.action}`);
+    } catch (e) {
+      console.error(
+        `[webhook] ${repo}: mirror dispatch skipped — ${
+          e instanceof Error ? e.message : e
+        }`,
+      );
     }
 
     console.log(`[webhook] ${repo}: ${c.action} ${c.kind}${kindNote}`);

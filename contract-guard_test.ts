@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert@^1";
+import { assertEquals } from "@std/assert";
 import { contractStale } from "./contract-guard.ts";
 
 /** Mock the GitHub contents API: return a blob sha per ref. */

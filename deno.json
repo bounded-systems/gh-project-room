@@ -43,6 +43,7 @@
   "publish": {
     "include": [
       "contract.ts",
+      "contract-guard.ts",
       "prioritization.ts",
       "board-inputs.ts",
       "reads.ts",

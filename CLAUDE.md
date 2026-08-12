@@ -58,7 +58,7 @@ in-box for free. Full design: `docs/reads-through-scout.md`.
 
 | Workflow                | Trigger                                    | What it does                                       |
 | ----------------------- | ------------------------------------------ | -------------------------------------------------- |
-| `front-desk-sync.yml`   | weekly + repo events + `workflow_dispatch` | Full board sweep                                   |
+| `front-desk-sync.yml`   | weekly + this repo's `issues` events + `workflow_dispatch` | Full board sweep. Deliberately **not** a PR check: no `pull_request` trigger and no `workflow_call`, because the sweep is debounced and GitHub renders a cancelled run as a failed ✗ on the PR that started it (#36). Kick it with a dispatch, never with `uses:`. |
 | `front-desk-budget.yml` | `workflow_call`                            | Budget gate (reusable)                             |
 | `jsr-check.yml`         | PRs                                        | `deno fmt`, `deno lint`, `deno check`, JSR dry-run |
 | `publish-jsr.yml`       | version tags                               | Publishes to JSR                                   |

@@ -7,12 +7,35 @@ name: front-desk-sync
 #      red (health-issue.ts, #64) — the top of the dogfood ladder
 #
 # Triggers:
-#   - issues/PRs opened, closed, labeled in THIS repo (immediate)
-#   - workflow_call from other org repos via trigger-sync.yml (cross-repo)
+#   - issues opened, closed, labeled in THIS repo (immediate)
 #   - weekly schedule at 06:00 UTC Monday (catch-all: field-schema drift, Score
 #     recompute — reduced from daily now that the webhook keeps Status live on
 #     close/reopen, see #53/#56; Coverage and Kind were always webhook-instant)
-#   - workflow_dispatch (manual / CI)
+#   - workflow_dispatch (manual / CI / the `/sync-board` slash command)
+#
+# ── The sweep is not a PR check (#36) ────────────────────────────────────────
+# This workflow deliberately has NO `pull_request` trigger and NO
+# `workflow_call`. Both attach the sweep's run to a pull request as a status
+# check, and the sweep is board housekeeping — an idempotent reconcile with a
+# schedule backstop — not a gate. A check that can go red for reasons unrelated
+# to the diff trains reviewers to ignore checks, and the debounce below makes
+# that routine: `cancel-in-progress` cancels the older in-flight sweep whenever a
+# newer event arrives, and GitHub surfaces a CANCELLED run as a FAILED (✗) check
+# on whichever PR started it. Observed on bounded-systems/site#46 (run
+# 28116463454, "Canceling since a higher priority waiting request for
+# front-desk-sync exists") after #46 and #47 were opened back-to-back.
+#
+# Do not re-add either trigger to make the sweep run on PR events. Nothing is
+# lost by their absence: opened issues/PRs land on the board instantly via the
+# Front Desk App webhook (webhook.ts) with front-desk-add.yml as the per-repo
+# fallback, close/reopen Status is webhook-live (#53/#56), and the weekly
+# schedule is the catch-all. Something outside this repo that genuinely needs to
+# kick a sweep should DISPATCH it fire-and-forget (`workflow_dispatch`, which
+# needs a credential carrying `actions: write` here — the built-in GITHUB_TOKEN
+# of another repo does not reach across repos) rather than `uses:` it, so the run
+# is never attached to the caller's PR at all. The retired cross-repo
+# `trigger-sync.yml` reusable-call chain is what #36 was filed against; as of
+# this change no repo in the org calls this workflow.
 #
 # Token (prx-26bq): minted via the cf-token-broker over GitHub Actions OIDC — the App key
 # lives only in the broker, never in this org's secrets. Set by the org var
@@ -25,13 +48,19 @@ name: front-desk-sync
 on:
   issues:
     types: [opened, closed, reopened, labeled, unlabeled, transferred]
-  pull_request:
-    types: [opened, closed, reopened, labeled, unlabeled]
-  workflow_call: {}
   schedule:
     - cron: "0 6 * * 1" # weekly catch-all (Monday 06:00 UTC)
   workflow_dispatch: {}
-# Debounce: cancel any in-progress sweep when a new event arrives.
+# Debounce: one global group, cancelling in progress, so a burst of events
+# collapses to a single sweep of the whole board rather than N redundant ones.
+# The group is a constant on purpose — every run reconciles the SAME board, so
+# there is nothing to partition it by, and a superseded run has no work the
+# superseding one will not redo.
+#
+# This is only safe to leave cancelling because no run of this workflow is ever
+# a PR status check — see "The sweep is not a PR check" above. Re-add a
+# `pull_request` trigger or `workflow_call` and every cancel here becomes a red
+# ✗ on somebody's PR again (#36).
 concurrency:
   group: front-desk-sync
   cancel-in-progress: true
@@ -41,21 +70,30 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      # Pin the checkout to THIS repo + ref. When invoked cross-repo via
-      # workflow_call (trigger-sync.yml from another org repo), the github
-      # context belongs to the CALLER, so a bare checkout would clone the
-      # caller's repo — leaving sync.ts absent and failing the run. Pinning
-      # repo+ref makes every trigger path run this repo's canonical sweep.
+      # Pin the checkout to THIS repo + ref, so every trigger path runs the
+      # canonical sweep from main. It matters most for workflow_dispatch, which
+      # can be aimed at any branch: without the pin, dispatching from a feature
+      # branch would sweep the real board with that branch's contract.ts.
+      # (It was originally added for the retired cross-repo workflow_call path,
+      # where the github context belonged to the CALLER and a bare checkout
+      # cloned the caller's repo, leaving sync.ts absent — #36 removed that
+      # trigger, but the pin is load-bearing on its own account.)
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: bounded-systems/gh-project-room
           ref: main
       # Best-effort: the sweep is a RECONCILE (idempotent) with a weekly-schedule
-      # backstop, and it's fanned out from every repo's issue/PR events. So a
-      # transient failure — above all the Front Desk App INSTALLATION hitting its
-      # shared API rate limit during a burst of events — must NOT red-flag every
-      # caller's PR. The next event/schedule sweep catches up. (continue-on-error
-      # on the mint + sweep steps, so the job still succeeds.)
+      # backstop, so a transient failure — above all the Front Desk App
+      # INSTALLATION hitting its shared API rate limit during a burst of events —
+      # is not worth a red run. The next event/schedule sweep catches up.
+      # (continue-on-error on the mint + sweep steps, so the job still succeeds.)
+      #
+      # NOTE this is the opposite call from .github-private's central sweep,
+      # which fails loudly on an unconfigured broker because there a false green
+      # hides a stale board. The difference is the schedule: that one is the
+      # every-30-minutes sweep whose silence IS the outage; this one is the
+      # weekly catch-all on top of it. Neither is a PR check any more (#36), so
+      # neither posture can red-flag somebody else's diff.
       #
       # Mint the Front Desk App token over GitHub Actions OIDC via the cf-token-broker —
       # the App key lives only in the broker (prx-26bq). Inlined (two curls) rather than the
@@ -85,9 +123,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.broker-token.outputs.token }}
         # CONTRACT_REF_SHA = the checked-out gh-project-room commit, so the
-        # contract-first guard (#83) compares THIS run's contract.ts to main's —
-        # authoritative even under cross-repo workflow_call (where GITHUB_SHA is
-        # the caller's commit).
+        # contract-first guard (#83) compares THIS run's contract.ts to main's.
+        # Read from the checkout rather than GITHUB_SHA, which names the ref the
+        # run was triggered on — not the ref the step above actually pinned.
         run: |
           export CONTRACT_REF_SHA="$(git rev-parse HEAD)"
           deno run --allow-net=api.github.com --allow-env sync.ts

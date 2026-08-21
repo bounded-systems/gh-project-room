@@ -8,7 +8,7 @@ computes a behavioral prioritization + budget contract over it.
 - `prioritization.ts` — codeable prioritization + budget contract (spike).
 - `sync.ts` / `projects.ts` — the Deno sweep that reconciles the live board.
 
-Source-available under **PolyForm Noncommercial 1.0.0**. Extracted from
+Open source under the [MIT License](LICENSE). Extracted from
 `bounded-systems/.github-private` (see its `docs/handoffs/gh-project-room.md`).
 
 ## Usage
